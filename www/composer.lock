@@ -4,18 +4,18 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4970d0e940fb2fece38ccc3a917ddeb5",
+    "content-hash": "235f91accc717a27be8770758c3f9226",
     "packages": [
         {
             "name": "brickphp/brickphp",
-            "version": "1.0.0",
+            "version": "dev-main",
             "dist": {
                 "type": "path",
-                "url": "../brickphp",
-                "reference": "973dad1fcd0b95d77a51f740318552bf378e797d"
+                "url": "../../brickphp",
+                "reference": "1636b8765c4d8c7e3e3ce8c51675000c2684a090"
             },
             "require": {
-                "php": ">=8.0"
+                "php": ">=8.1"
             },
             "require-dev": {
                 "phpunit/phpunit": "^11.0"
@@ -24,14 +24,33 @@
             "autoload": {
                 "psr-4": {
                     "BrickPHP\\": "src/"
-                },
-                "files": []
+                }
             },
             "autoload-dev": {
                 "psr-4": {
                     "BrickPHP\\Tests\\": "tests/"
                 }
             },
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Willem Bijker",
+                    "email": "willem@itecho.co.za"
+                }
+            ],
+            "description": "Server-powered web applications, built brick by brick — entirely in PHP. No JavaScript framework, no build pipeline, no Node.",
+            "homepage": "https://github.com/wbijker/brickphp",
+            "keywords": [
+                "components",
+                "framework",
+                "hmr",
+                "no-js",
+                "server-driven",
+                "ssr",
+                "ui"
+            ],
             "transport-options": {
                 "relative": true
             }
@@ -64,10 +83,10 @@
             "dist": {
                 "type": "path",
                 "url": "../heroicons",
-                "reference": "c1af77c85e8ed2769ada8e152d7bdb3978a5dcb7"
+                "reference": "21cdfd7e39c952f6a07be6882107b75cb3bf211c"
             },
             "require": {
-                "brickphp/brickphp": "^1.0",
+                "brickphp/brickphp": "*",
                 "php": ">=8.0"
             },
             "type": "library",
@@ -87,10 +106,10 @@
             "dist": {
                 "type": "path",
                 "url": "../samples/Docs",
-                "reference": "1ccdae8eb470a80751076a931fe5cc8ebaa3b5bb"
+                "reference": "fe2943aa1df00fdc43507a1f13144aa885577205"
             },
             "require": {
-                "brickphp/brickphp": "^1.0",
+                "brickphp/brickphp": "*",
                 "php": ">=8.0"
             },
             "type": "library",
@@ -109,10 +128,10 @@
             "dist": {
                 "type": "path",
                 "url": "../samples/News",
-                "reference": "d1488cba8d0ae1bf8a6700d677c71eb319748753"
+                "reference": "dd4efe953dc716c04f4739df6007340919de1489"
             },
             "require": {
-                "brickphp/brickphp": "^1.0",
+                "brickphp/brickphp": "*",
                 "php": ">=8.0"
             },
             "type": "library",
@@ -131,10 +150,10 @@
             "dist": {
                 "type": "path",
                 "url": "../samples/SiteApp",
-                "reference": "72c82ab1750596607a285ce642ba09a554c31281"
+                "reference": "df1f262780aecb3488b477217a34150897919b21"
             },
             "require": {
-                "brickphp/brickphp": "^1.0",
+                "brickphp/brickphp": "*",
                 "php": ">=8.0"
             },
             "type": "library",
@@ -153,10 +172,10 @@
             "dist": {
                 "type": "path",
                 "url": "../samples/TodoApp",
-                "reference": "21449356a18e443e2be3db0ee3149dbcc637bbe8"
+                "reference": "8b29f9a2441ffc375eeeafb0474e2401711d0c91"
             },
             "require": {
-                "brickphp/brickphp": "^1.0",
+                "brickphp/brickphp": "*",
                 "php": ">=8.0"
             },
             "type": "library",
@@ -172,9 +191,9 @@
     ],
     "packages-dev": [],
     "aliases": [],
-    "minimum-stability": "stable",
+    "minimum-stability": "dev",
     "stability-flags": {},
-    "prefer-stable": false,
+    "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
         "ext-json": "*",

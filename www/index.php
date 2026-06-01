@@ -29,7 +29,7 @@ if (str_starts_with($_SERVER['REQUEST_URI'] ?? '', '/style.css')) {
     echo "/* ==========================================================================\n";
     echo "   PREFLIGHT — browser reset (from preflight.css)\n";
     echo "   ========================================================================== */\n\n";
-    echo file_get_contents(__DIR__ . '/preflight.css');
+    echo file_get_contents(Brick::assetPath('preflight.css'));
     echo "\n/* ==========================================================================\n";
     echo "   APPLICATION — utility rules extracted from samples/News\n";
     echo "   ========================================================================== */\n\n";

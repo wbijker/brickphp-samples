@@ -1,11 +1,11 @@
 <?php
 
-use Samples\News\NewsApp;
 use BrickPHP\Brick;
+use Samples\Docs\DocsApp;
 
 require 'vendor/autoload.php';
 
-// Dev-only HMR endpoint. Long-polls for a source change and publishes the
-// current fingerprint into BrickPHP\Hash; the client reloads when it reports
-// changed. Config (incl. the dev gate) comes from the app.
-Brick::watch(NewsApp::class);
+// Identical to index.php — Brick::run sees the `/hmr.php` URL and
+// internally dispatches to the HMR long-poll endpoint. Kept as a real
+// file so Apache can serve the request without needing a rewrite rule.
+Brick::run(DocsApp::class);

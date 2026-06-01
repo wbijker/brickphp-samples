@@ -41,5 +41,7 @@
     },
     "config": {
         "disable-tls": true
-    }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
 }

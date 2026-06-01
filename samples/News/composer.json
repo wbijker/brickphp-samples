@@ -9,6 +9,6 @@
   },
   "require": {
     "php": ">=8.0",
-    "brickphp/brickphp": "^1.0"
+    "brickphp/brickphp": "*"
   }
 }
