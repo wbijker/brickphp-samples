@@ -1,0 +1,14 @@
+{
+  "name": "samples/news",
+  "type": "library",
+  "version": "1.0.0",
+  "autoload": {
+    "psr-4": {
+      "Samples\\News\\": "src/"
+    }
+  },
+  "require": {
+    "php": ">=8.0",
+    "brickphp/brickphp": "^1.0"
+  }
+}

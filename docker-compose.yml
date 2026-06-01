@@ -1,0 +1,35 @@
+# ./docker-compose.yml
+version: '3'
+
+services:
+#  db:
+#    container_name: mysql
+#    # mysql does not have arm architecture
+#    platform: linux/x86_64
+#    image: mysql:5.7.38
+#    environment:
+#      MYSQL_ROOT_PASSWORD: docker
+#      MYSQL_DATABASE: spwa-php
+#      MYSQL_USER: spwa-php
+#      MYSQL_PASSWORD: spwa-php
+#    ports:
+#      - "3306:3306"
+
+  php-apache:
+    container_name: php-apache
+    build:
+      context: .
+      dockerfile: Dockerfile
+#    depends_on:
+#      - db
+
+#    ultimately packages would be installed from composer, but now we are referencing the folder directly
+
+    volumes:
+      - ./www:/var/www/html/
+      - ./brickphp:/var/www/brickphp/
+      - ./codequery:/var/www/codequery/
+      - ./heroicons:/var/www/heroicons/
+      - ./samples:/var/www/samples/
+    ports:
+      - "8000:80"

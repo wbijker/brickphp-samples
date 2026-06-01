@@ -1,0 +1,11 @@
+# Composer
+www/vendor/
+**/vendor/
+
+# Composer caches / build artifacts
+*.cache
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,16 @@
+{
+  "name": "itecho/heroicons",
+  "type": "library",
+  "version": "1.0.0",
+  "autoload": {
+    "psr-4": {
+      "HeroIcons\\": "HeroIcons/"
+    },
+    "files": [
+    ]
+  },
+  "require": {
+    "php": ">=8.0",
+    "brickphp/brickphp": "^1.0"
+  }
+}

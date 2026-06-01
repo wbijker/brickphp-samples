@@ -1,0 +1,45 @@
+{
+    "name": "brickphp/test",
+    "type": "library",
+    "version": "1.0.0",
+    "autoload": {
+        "psr-4": {
+            "App\\": "App/"
+        }
+    },
+    "repositories": [
+        {
+            "packagist": false
+        },
+        {
+            "type": "path",
+            "url": "../../brickphp/"
+        },
+        {
+            "type": "path",
+            "url": "../codequery/"
+        },
+        {
+            "type": "path",
+            "url": "../heroicons/"
+        },
+        {
+            "type": "path",
+            "url": "../samples/*"
+        }
+    ],
+    "require": {
+        "brickphp/brickphp": "*",
+        "itecho/codequery": "*",
+        "itecho/heroicons": "*",
+        "samples/news": "*",
+        "samples/site-app": "*",
+        "samples/todo-app": "*",
+        "samples/docs": "*",
+        "ext-json": "*",
+        "ext-zlib": "*"
+    },
+    "config": {
+        "disable-tls": true
+    }
+}

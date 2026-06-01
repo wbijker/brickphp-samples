@@ -1,0 +1,185 @@
+{
+    "_readme": [
+        "This file locks the dependencies of your project to a known state",
+        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
+        "This file is @generated automatically"
+    ],
+    "content-hash": "4970d0e940fb2fece38ccc3a917ddeb5",
+    "packages": [
+        {
+            "name": "brickphp/brickphp",
+            "version": "1.0.0",
+            "dist": {
+                "type": "path",
+                "url": "../brickphp",
+                "reference": "973dad1fcd0b95d77a51f740318552bf378e797d"
+            },
+            "require": {
+                "php": ">=8.0"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^11.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "BrickPHP\\": "src/"
+                },
+                "files": []
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "BrickPHP\\Tests\\": "tests/"
+                }
+            },
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
+            "name": "itecho/codequery",
+            "version": "1.0.0",
+            "dist": {
+                "type": "path",
+                "url": "../codequery",
+                "reference": "204839f50ed79bb59446c90166fcebb2011a5364"
+            },
+            "require": {
+                "php": ">=8.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "CodeQuery\\": "CodeQuery/"
+                },
+                "files": []
+            },
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
+            "name": "itecho/heroicons",
+            "version": "1.0.0",
+            "dist": {
+                "type": "path",
+                "url": "../heroicons",
+                "reference": "c1af77c85e8ed2769ada8e152d7bdb3978a5dcb7"
+            },
+            "require": {
+                "brickphp/brickphp": "^1.0",
+                "php": ">=8.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "HeroIcons\\": "HeroIcons/"
+                },
+                "files": []
+            },
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
+            "name": "samples/docs",
+            "version": "1.0.0",
+            "dist": {
+                "type": "path",
+                "url": "../samples/Docs",
+                "reference": "1ccdae8eb470a80751076a931fe5cc8ebaa3b5bb"
+            },
+            "require": {
+                "brickphp/brickphp": "^1.0",
+                "php": ">=8.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Samples\\Docs\\": "src/"
+                }
+            },
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
+            "name": "samples/news",
+            "version": "1.0.0",
+            "dist": {
+                "type": "path",
+                "url": "../samples/News",
+                "reference": "d1488cba8d0ae1bf8a6700d677c71eb319748753"
+            },
+            "require": {
+                "brickphp/brickphp": "^1.0",
+                "php": ">=8.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Samples\\News\\": "src/"
+                }
+            },
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
+            "name": "samples/site-app",
+            "version": "1.0.0",
+            "dist": {
+                "type": "path",
+                "url": "../samples/SiteApp",
+                "reference": "72c82ab1750596607a285ce642ba09a554c31281"
+            },
+            "require": {
+                "brickphp/brickphp": "^1.0",
+                "php": ">=8.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Samples\\SiteApp\\": "src/"
+                }
+            },
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
+            "name": "samples/todo-app",
+            "version": "1.0.0",
+            "dist": {
+                "type": "path",
+                "url": "../samples/TodoApp",
+                "reference": "21449356a18e443e2be3db0ee3149dbcc637bbe8"
+            },
+            "require": {
+                "brickphp/brickphp": "^1.0",
+                "php": ">=8.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Samples\\TodoApp\\": "src/"
+                }
+            },
+            "transport-options": {
+                "relative": true
+            }
+        }
+    ],
+    "packages-dev": [],
+    "aliases": [],
+    "minimum-stability": "stable",
+    "stability-flags": {},
+    "prefer-stable": false,
+    "prefer-lowest": false,
+    "platform": {
+        "ext-json": "*",
+        "ext-zlib": "*"
+    },
+    "platform-dev": {},
+    "plugin-api-version": "2.9.0"
+}
