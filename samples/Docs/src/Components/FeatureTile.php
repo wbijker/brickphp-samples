@@ -6,16 +6,19 @@ use BrickPHP\UI\Color;
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
 use BrickPHP\UI\Pseudo;
+use BrickPHP\UI\Svg;
 use BrickPHP\UI\UI;
 use BrickPHP\UI\Unit;
 use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
+use HeroIcons\HeroIcons;
 
 /**
  * One landing-page feature card built on top of the generic Tile. Standard
- * layout: Material icon, headline + "Read more" link, body copy, then a
+ * layout: icon, headline + "Read more" link, body copy, then a
  * caller-supplied "preview" body (a code window, a HMR ticker, a
- * wireframe sketch — anything).
+ * wireframe sketch — anything). The caller passes the HeroIcons SVG; the
+ * tile sets its size and color.
  */
 class FeatureTile extends Component
 {
@@ -23,7 +26,7 @@ class FeatureTile extends Component
     private array $previewChildren = [];
 
     public function __construct(
-        private string $icon,
+        private Svg $icon,
         private string $title,
         private string $body,
         private string $href = '#',
@@ -41,7 +44,7 @@ class FeatureTile extends Component
         return (new Tile())
             ->accent()
             ->content(
-                (new Icon($this->icon))->color(Color::orange(500))->size(28),
+                $this->icon->svgWidth('28')->svgHeight('28')->color(Color::orange(500)),
                 $this->titleRow(),
                 UI::text($this->body)
                     ->fontSize(FontSize::Small)
@@ -78,7 +81,9 @@ class FeatureTile extends Component
                     ->weight(FontWeight::SemiBold)
                     ->color(Color::orange(500))
                     ->color(Color::orange(600), Pseudo::hover()),
-                (new Icon('chevron_right'))->color(Color::orange(500))->size(14),
+                HeroIcons::ChevronRight('none', 1.5, 'currentColor', '')
+                    ->svgWidth('14')->svgHeight('14')
+                    ->color(Color::orange(500)),
             );
     }
 

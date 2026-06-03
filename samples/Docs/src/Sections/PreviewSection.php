@@ -7,14 +7,15 @@ use BrickPHP\UI\Direction;
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
 use BrickPHP\UI\Pseudo;
+use BrickPHP\UI\Svg;
 use BrickPHP\UI\UI;
 use BrickPHP\UI\UIElement;
 use BrickPHP\UI\Unit;
 use BrickPHP\VNode\StatelessComponent;
 use BrickPHP\VNode\VNode;
+use HeroIcons\HeroIcons;
 use Samples\Docs\Components\BrowserFrame;
 use Samples\Docs\Components\CodeWindow;
-use Samples\Docs\Components\Icon;
 use Samples\Docs\Components\PHPCode;
 use Samples\Docs\Components\PHPIcon;
 
@@ -82,7 +83,9 @@ class PreviewSection extends StatelessComponent
             ->gap(Unit::px(12))
             ->alignTop()
             ->content(
-                (new Icon('check_circle'))->color(Color::orange(500))->size(20),
+                HeroIcons::CheckCircle('none', 1.5, 'currentColor', '')
+                    ->svgWidth('20')->svgHeight('20')
+                    ->color(Color::orange(500)),
                 UI::text($text)
                     ->fontSize(FontSize::Small)
                     ->color(Color::slate(700))
@@ -159,14 +162,14 @@ class PreviewSection extends StatelessComponent
                             ->gap(Unit::px(16))
                             ->alignMiddle()
                             ->content(
-                                $this->counterButton('remove'),
-                                $this->counterButton('add'),
+                                $this->counterButton(HeroIcons::Minus('none', 1.5, 'currentColor', '')),
+                                $this->counterButton(HeroIcons::Plus('none', 1.5, 'currentColor', '')),
                             ),
                     ),
             );
     }
 
-    private function counterButton(string $icon): UIElement
+    private function counterButton(Svg $icon): UIElement
     {
         return UI::button('')
             ->width(Unit::px(48))
@@ -180,6 +183,6 @@ class PreviewSection extends StatelessComponent
             ->background(Color::orange(500), Pseudo::hover())
             ->color(Color::white(), Pseudo::hover())
             ->borderColor(Color::orange(500), Pseudo::hover())
-            ->content((new Icon($icon))->size(20));
+            ->content($icon->svgWidth('20')->svgHeight('20'));
     }
 }

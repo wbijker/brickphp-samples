@@ -9,6 +9,7 @@ use BrickPHP\UI\UI;
 use BrickPHP\UI\Unit;
 use BrickPHP\VNode\StatelessComponent;
 use BrickPHP\VNode\VNode;
+use HeroIcons\HeroIcons;
 use Samples\Docs\Components\CodeWindow;
 use Samples\Docs\Components\FeatureTile;
 use Samples\Docs\Components\PHPCode;
@@ -59,7 +60,7 @@ class FeaturesSection extends StatelessComponent
         public function render() { ... }
         PHP;
         return (new FeatureTile(
-            'dataset',
+            HeroIcons::CircleStack('none', 1.5, 'currentColor', ''),
             'All in one place',
             'Routing, state, components, events, styling — every concern lives in one PHP codebase. No context-switching between languages or repos.',
         ))->preview($this->codeBox('App.php', $code));
@@ -73,7 +74,7 @@ class FeaturesSection extends StatelessComponent
         );
         PHP;
         return (new FeatureTile(
-            'link_off',
+            HeroIcons::LinkSlash('none', 1.5, 'currentColor', ''),
             'No glue — all PHP',
             'Skip the API layer. Skip the serialization. Skip the type duplication. Your UI talks to your data directly because it lives in the same process.',
         ))->preview($this->codeBox('UserList.php', $code));
@@ -97,7 +98,7 @@ class FeaturesSection extends StatelessComponent
             );
 
         return (new FeatureTile(
-            'bolt',
+            HeroIcons::Bolt('none', 1.5, 'currentColor', ''),
             'Hot module reloading',
             'Save a PHP file, watch the browser update in place — without losing state. HMR built in, no Vite or Webpack config required.',
         ))->preview(
@@ -113,7 +114,7 @@ class FeaturesSection extends StatelessComponent
           ->color(Color::orange());
         PHP;
         return (new FeatureTile(
-            'palette',
+            HeroIcons::PaintBrush('none', 1.5, 'currentColor', ''),
             'Styling out of the box',
             'A complete utility CSS system is bundled and lex-scanned from your source. Write semantic methods like padding(Unit::large()).',
         ))->preview($this->codeBox('Button.php', $code));
@@ -150,7 +151,7 @@ class FeaturesSection extends StatelessComponent
             );
 
         return (new FeatureTile(
-            'grid_view',
+            HeroIcons::Squares2x2('none', 1.5, 'currentColor', ''),
             'Wireframe inspector',
             'Toggle an overlay that outlines every UI element with its name and source location. Click straight through to the file from the browser.',
         ))->preview($wireframe);
@@ -187,7 +188,7 @@ class FeaturesSection extends StatelessComponent
             );
 
         return (new FeatureTile(
-            'bug_report',
+            HeroIcons::BugAnt('none', 1.5, 'currentColor', ''),
             'Debugging made easy',
             'Xdebug works out of the box. Server-rendered patches surface in the browser console so you can see exactly what changed between renders.',
         ))->preview(
@@ -203,7 +204,7 @@ class FeaturesSection extends StatelessComponent
         }
         PHP;
         return (new FeatureTile(
-            'view_quilt',
+            HeroIcons::ViewColumns('none', 1.5, 'currentColor', ''),
             'UI elements, not JS + CSS',
             'Express your interface through typed UIElements. No className strings, no template languages, no JSX. Refactor with IDE confidence.',
         ))->preview($this->codeBox('HeaderElement.php', $code));

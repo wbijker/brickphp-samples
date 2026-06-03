@@ -10,6 +10,7 @@ use BrickPHP\UI\UIElement;
 use BrickPHP\UI\Unit;
 use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
+use HeroIcons\HeroIcons;
 
 /**
  * Mac-style browser chrome — three coloured traffic-light dots, a
@@ -91,7 +92,9 @@ class BrowserFrame extends Component
             ->gap(Unit::px(8))
             ->alignMiddle()
             ->content(
-                (new Icon('lock'))->size(14)->color(Color::slate(500)),
+                HeroIcons::LockClosed('none', 1.5, 'currentColor', '')
+                    ->svgWidth('14')->svgHeight('14')
+                    ->color(Color::slate(500)),
                 UI::text($this->url)
                     ->fontSize(FontSize::ExtraSmall)
                     ->color(Color::slate(500)),

@@ -11,11 +11,15 @@ class HeroIcons
 
     private static function build(string $fill, float $strokeWidth, string $stroke, string $class, array $paths): Svg
     {
+        // SVG-attribute setters (defaultFill / defaultStroke / defaultStrokeWidth)
+        // accept strings like 'none' and 'currentColor' and emit them as
+        // attributes on the root <svg>. The CSS-styling variants (fill, stroke,
+        // strokeWidth) are typed for Color/int and would reject these values.
         $svg = new Svg();
         $svg->viewBox(0, 0, 24, 24)
-            ->fill($fill)
-            ->strokeWidth((string)$strokeWidth)
-            ->stroke($stroke)
+            ->defaultFill($fill)
+            ->defaultStrokeWidth((string)$strokeWidth)
+            ->defaultStroke($stroke)
             ->class($class)
             ->content(
                 ...array_map(fn($p) => Svg::path($p)
