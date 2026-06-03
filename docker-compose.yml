@@ -25,9 +25,18 @@ services:
 
 #    ultimately packages would be installed from composer, but now we are referencing the folder directly
 
+    # `../brickphp` reaches out of this repo into the sibling framework
+    # repo at ~/projects/brickphp. Volume mounts can resolve paths
+    # outside the compose file's directory (unlike Dockerfile COPY),
+    # so cross-repo dev works without changing the build context.
+    # Expected layout:
+    #
+    #   ~/projects/
+    #   ├── brickphp/          (library repo)
+    #   └── brickphp-samples/  (this repo)
     volumes:
       - ./www:/var/www/html/
-      - ./brickphp:/var/www/brickphp/
+      - ../brickphp:/var/www/brickphp/
       - ./codequery:/var/www/codequery/
       - ./heroicons:/var/www/heroicons/
       - ./samples:/var/www/samples/
