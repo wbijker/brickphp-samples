@@ -2,6 +2,12 @@
 www/vendor/
 **/vendor/
 
+# Local symlink to the sibling brickphp library repo (see README → Setup).
+# Each developer creates this themselves so the link points at their own
+# checkout (and so Windows users without symlink privileges aren't blocked
+# by a checked-in symlink).
+/brickphp
+
 # Composer caches / build artifacts
 *.cache
 

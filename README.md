@@ -33,8 +33,26 @@ cd ~/projects
 git clone git@github.com:wbijker/brickphp.git
 git clone git@github.com:wbijker/brickphp-samples.git
 cd brickphp-samples
+
+# Link the sibling library into this repo so the compose mount and the
+# `path` Composer repository can find it without reaching outside the
+# project root.
+ln -s ../brickphp brickphp        # macOS / Linux
+# mklink /J brickphp ..\brickphp  # Windows (cmd, as Administrator) — junction
+# New-Item -ItemType SymbolicLink -Path brickphp -Target ..\brickphp  # PowerShell
+
 docker compose up
 ```
+
+The `brickphp` link is gitignored — each developer creates it locally so
+the target matches their own checkout (and Windows users without symlink
+privileges aren't blocked by a checked-in link).
+
+Why the link is needed: this stack is typically run from inside another
+container (devcontainer / Docker-in-Docker). Bind-mount paths outside the
+compose file's directory don't resolve reliably against the outer host
+filesystem in that setup, so `docker-compose.yml` mounts `./brickphp`
+(inside this repo) instead of `../brickphp` (outside it).
 
 Visit http://localhost:8000.
 

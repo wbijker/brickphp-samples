@@ -4,15 +4,15 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "235f91accc717a27be8770758c3f9226",
+    "content-hash": "93c0596caa432805cf446cd094864d97",
     "packages": [
         {
             "name": "brickphp/brickphp",
             "version": "dev-main",
             "dist": {
                 "type": "path",
-                "url": "../../brickphp",
-                "reference": "1636b8765c4d8c7e3e3ce8c51675000c2684a090"
+                "url": "../brickphp",
+                "reference": "210d54882b1a64595d8eefd0ef769a795c617952"
             },
             "require": {
                 "php": ">=8.1"
