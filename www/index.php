@@ -1,5 +1,6 @@
 <?php
 
+use App\Config;
 use BrickPHP\Brick;
 use BrickPHP\UI\CssExtractor;
 use Samples\Docs\DocsApp;
@@ -37,4 +38,4 @@ if (str_starts_with($_SERVER['REQUEST_URI'] ?? '', '/style.css')) {
     exit;
 }
 
-Brick::run(DocsApp::class);
+Brick::run(DocsApp::class, new Config());
