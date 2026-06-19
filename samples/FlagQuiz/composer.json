@@ -1,0 +1,14 @@
+{
+  "name": "samples/flag-quiz",
+  "type": "library",
+  "version": "1.0.0",
+  "autoload": {
+    "psr-4": {
+      "Samples\\FlagQuiz\\": "src/"
+    }
+  },
+  "require": {
+    "php": ">=8.0",
+    "brickphp/brickphp": "*"
+  }
+}
