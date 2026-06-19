@@ -4,6 +4,8 @@ namespace Samples\FlagQuiz;
 
 use BrickPHP\Js\Js;
 use BrickPHP\UI\Direction;
+use BrickPHP\UI\FontSize;
+use BrickPHP\UI\FontWeight;
 use BrickPHP\UI\Pseudo;
 use BrickPHP\UI\Shadow;
 use BrickPHP\UI\UI;
@@ -13,8 +15,10 @@ use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 use Samples\FlagQuiz\Components\BrandInfo;
 use Samples\FlagQuiz\Components\FlagGrid;
+use Samples\FlagQuiz\Components\GuessInput;
 use Samples\FlagQuiz\Components\GuessPanel;
 use Samples\FlagQuiz\Components\ScoreBar;
+use Samples\FlagQuiz\Components\WorldMap;
 use Samples\FlagQuiz\Screens\FinishedScreen;
 use Samples\FlagQuiz\Screens\StartScreen;
 
@@ -40,6 +44,9 @@ class FlagQuiz extends Component
 
     private string $phase = 'start';
 
+    /** Chosen game mode: 'flags' (name the flag) | 'location' (find it on the map). */
+    private string $mode = 'flags';
+
     /** Settings, chosen on the start screen and kept across games. */
     private bool $showFlags = true;
     private bool $strict = true;
@@ -64,6 +71,7 @@ class FlagQuiz extends Component
     protected function initialize(): void
     {
         $this->useState($this->phase);
+        $this->useState($this->mode);
         $this->useState($this->showFlags);
         $this->useState($this->strict);
         $this->useState($this->order);
@@ -100,19 +108,33 @@ class FlagQuiz extends Component
      */
     private function handleGuess(string $value): void
     {
-        if ($this->current()->matches($value)) {
+        $this->judge($this->current()->matches($value));
+    }
+
+    /** A clicked country (Locations mode) — its ISO-2 code is the guess. */
+    private function handlePick(string $iso): void
+    {
+        $this->judge(strtolower($iso) === $this->current()->code);
+    }
+
+    /**
+     * Resolve a guess. Correct always advances. A wrong guess is final (marked
+     * and advanced) in strict mode, otherwise it just flags the input red so
+     * the player can retry.
+     */
+    private function judge(bool $correct): void
+    {
+        if ($correct) {
             $this->status[$this->index] = 'correct';
             $this->wrong = false;
             $this->history[] = 'correct';
             $this->advance();
         } elseif ($this->strict) {
-            // Strict: a wrong guess is final and we move on, so it's recorded.
             $this->status[$this->index] = 'wrong';
             $this->wrong = false;
             $this->history[] = 'wrong';
             $this->advance();
         } else {
-            // Lenient: stay on the flag for a retry — nothing recorded yet.
             $this->wrong = true;
         }
     }
@@ -205,13 +227,17 @@ class FlagQuiz extends Component
             ->content(
                 $this->buildProgress($total, $answered),
                 match ($this->phase) {
-                    'playing' => $this->buildPlay($total, $answered),
+                    'playing' => $this->mode === 'location'
+                        ? $this->buildPlayLocation($total, $answered)
+                        : $this->buildPlay($total, $answered),
                     'finished' => $this->buildFinished($total),
                     default => new StartScreen(
                         $total,
+                        $this->mode,
                         $this->showFlags,
                         $this->strict,
                         fn() => $this->startGame(),
+                        fn(string $mode) => $this->mode = $mode,
                         fn() => $this->toggleShowFlags(),
                         fn() => $this->toggleStrict(),
                     ),
@@ -308,6 +334,79 @@ class FlagQuiz extends Component
             ->maxWidth(Unit::px(760))
             ->marginX(Unit::auto())
             ->content(...$children);
+    }
+
+    /** Locations mode: scorebar, the world map (target highlighted), the input. */
+    private function buildPlayLocation(int $total, int $answered): UIElement
+    {
+        $correct = count(array_filter($this->status, fn(string $s) => $s === 'correct'));
+        $score = $answered > 0 ? (int)round($correct / $answered * 100) : 0;
+        $time = $this->fmtTime(time() - $this->startTime);
+        $right = count(array_filter($this->history, fn(string $r) => $r === 'correct'));
+        $wrong = count($this->history) - $right;
+
+        $all = Country::all();
+        $greens = [];
+        $reds = [];
+        foreach ($this->order as $pos => $countryIdx) {
+            $status = $this->status[$pos] ?? '';
+            if ($status === 'correct') {
+                $greens[] = $all[$countryIdx]->code;
+            } elseif ($status === 'wrong') {
+                $reds[] = $all[$countryIdx]->code;
+            }
+        }
+        if ($this->wrong) {
+            // A lenient miss flashes the target red until the next try.
+            $reds[] = $this->current()->code;
+        }
+
+        return UI::column()
+            ->grow()
+            ->minHeight(Unit::px(0))
+            ->margin(Unit::px(16))
+            ->margin(Unit::px(32), Pseudo::lg())
+            ->background(Palette::white())
+            ->bordered()
+            ->borderColor(Palette::border())
+            ->rounded(Unit::px(18))
+            ->shadow(Shadow::Large)
+            ->clipContent()
+            ->content(
+                new ScoreBar($answered, $total, $score, $right, $wrong, $time, array_slice($this->history, -5)),
+                UI::row()
+                    ->noShrink()
+                    ->alignMiddle()
+                    ->gap(Unit::px(8))
+                    ->bordered(bottom: 1)
+                    ->borderColor(Palette::border())
+                    ->padding(x: Unit::px(24), y: Unit::px(12))
+                    ->content(
+                        UI::text('Which country is highlighted?')
+                            ->fontSize(FontSize::Small)->weight(FontWeight::SemiBold),
+                        UI::text('· tap it on the map or type its name')
+                            ->fontSize(FontSize::Small)->color(Palette::subtle()),
+                    ),
+                UI::column()
+                    ->grow()
+                    ->minHeight(Unit::px(0))
+                    ->content(
+                        new WorldMap(
+                            $this->current()->code,
+                            $greens,
+                            $reds,
+                            fn(string $iso) => $this->handlePick($iso),
+                        ),
+                    ),
+                new GuessInput(
+                    $this->current()->code,
+                    $this->wrong,
+                    fn(string $value) => $this->handleGuess($value),
+                    fn() => $this->skip(),
+                    fn() => $this->next(),
+                ),
+                new BrandInfo(fn() => $this->phase = 'start', fn() => $this->finish()),
+            );
     }
 
     /** @return array<array{pos:int, country:Country}> all unanswered (incl. current) */
