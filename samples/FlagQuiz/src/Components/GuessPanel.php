@@ -27,13 +27,9 @@ class GuessPanel extends Component
     private string $input = '';
     private string $lastCode = '';
 
-    /** @param string[] $recent last 5 attempt results for the history strip */
     public function __construct(
         private Country $current,
         private bool $wrong,
-        private string $feedback,
-        private int $tick,
-        private array $recent,
         private Closure $onGuess,
         private Closure $onSkip,
         private Closure $onNext,
@@ -62,15 +58,9 @@ class GuessPanel extends Component
             ->content(
                 $this->buildFlag(),
                 $this->buildInput(),
-                UI::row()
-                    ->alignCenter()
-                    ->bordered(top: 1)
-                    ->borderColor(Palette::border())
-                    ->padding(x: Unit::px(22), y: Unit::px(12))
-                    ->content(new AttemptHistory($this->recent)),
                 $this->buildHint(),
-                // Escape clicks this (see FlagQuizApp) so a "pass" only reaches
-                // the server on that key — no per-keystroke round trips.
+                // Escape/Tab click this (see FlagQuizApp) so a "pass" only
+                // reaches the server on those keys — no per-keystroke traffic.
                 UI::button('Next')
                     ->attr('id', 'fq-next')
                     ->hidden()
@@ -80,52 +70,19 @@ class GuessPanel extends Component
 
     private function buildFlag(): UIElement
     {
-        $children = [
-            UI::image($this->current->bigUrl(), $this->current->name)
-                ->maxWidth(Unit::full())
-                ->maxHeight(Unit::full())
-                ->objectContain()
-                ->rounded(Unit::px(6))
-                ->shadow(Shadow::Small),
-        ];
-
-        if ($this->feedback !== '') {
-            $children[] = $this->buildFeedback();
-        }
-
         return UI::row()
-            ->relative()
             ->extendX()
             ->height(Unit::px(288))
             ->alignCenter()
             ->alignMiddle()
             ->padding(Unit::px(36))
-            ->content(...$children);
-    }
-
-    /** Green check / red cross that pops in and fades out (see FlagQuizApp keyframe). */
-    private function buildFeedback(): UIElement
-    {
-        $correct = $this->feedback === 'correct';
-
-        return UI::row()
-            ->absolute()
-            ->inset(Unit::none())
-            ->alignCenter()
-            ->alignMiddle()
-            ->class('fq-feedback')
-            ->key('fb-' . $this->tick)
             ->content(
-                UI::row()
-                    ->size(Unit::px(92))
-                    ->roundedFull()
-                    ->alignCenter()
-                    ->alignMiddle()
-                    ->shadow(Shadow::Large)
-                    ->background($correct ? Palette::green() : Palette::red())
-                    ->content(
-                        UI::text($correct ? '✓' : '✕')->color(Palette::white())->fontSize(FontSize::FiveXL),
-                    ),
+                UI::image($this->current->bigUrl(), $this->current->name)
+                    ->maxWidth(Unit::full())
+                    ->maxHeight(Unit::full())
+                    ->objectContain()
+                    ->rounded(Unit::px(6))
+                    ->shadow(Shadow::Small)
             );
     }
 
@@ -136,6 +93,7 @@ class GuessPanel extends Component
             ->placeholder('Type the country…')
             ->autocomplete('off')
             ->key('fq-input')
+            ->attr('id', 'fq-input')
             ->autofocus()
             ->bind($this->input)
             ->width(Unit::full())

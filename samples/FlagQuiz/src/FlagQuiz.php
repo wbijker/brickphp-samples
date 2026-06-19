@@ -2,6 +2,7 @@
 
 namespace Samples\FlagQuiz;
 
+use BrickPHP\Js\Js;
 use BrickPHP\UI\Direction;
 use BrickPHP\UI\Pseudo;
 use BrickPHP\UI\Shadow;
@@ -41,7 +42,7 @@ class FlagQuiz extends Component
 
     /** Settings, chosen on the start screen and kept across games. */
     private bool $showFlags = true;
-    private bool $strict = false;
+    private bool $strict = true;
 
     /** @var int[] shuffled indices into Country::all() */
     private array $order = [];
@@ -49,11 +50,13 @@ class FlagQuiz extends Component
     /** @var string[] one entry per order position: '' | 'correct' | 'skipped' | 'wrong' */
     private array $status = [];
     private bool $wrong = false;
-    /** Last-answer feedback for the flag overlay: '' | 'correct' | 'wrong'. */
-    private string $feedback = '';
-    /** Bumped on every guess so the feedback overlay is a fresh, re-animating node. */
-    private int $tick = 0;
-    /** @var string[] every judged guess in order: 'correct' | 'wrong' */
+    /**
+     * One entry per *decided* flag, in order: 'correct' | 'wrong'. Only a
+     * correct answer or a strict-mode wrong answer (where we move on) records
+     * an entry — a retryable wrong guess does not.
+     *
+     * @var string[]
+     */
     private array $history = [];
     private int $startTime = 0;
     private int $elapsed = 0;
@@ -67,8 +70,6 @@ class FlagQuiz extends Component
         $this->useState($this->index);
         $this->useState($this->status);
         $this->useState($this->wrong);
-        $this->useState($this->feedback);
-        $this->useState($this->tick);
         $this->useState($this->history);
         $this->useState($this->startTime);
         $this->useState($this->elapsed);
@@ -86,8 +87,6 @@ class FlagQuiz extends Component
         $this->index = 0;
         $this->status = array_fill(0, $n, '');
         $this->wrong = false;
-        $this->feedback = '';
-        $this->tick = 0;
         $this->history = [];
         $this->elapsed = 0;
         $this->startTime = time();
@@ -101,23 +100,20 @@ class FlagQuiz extends Component
      */
     private function handleGuess(string $value): void
     {
-        $this->tick++;
         if ($this->current()->matches($value)) {
             $this->status[$this->index] = 'correct';
             $this->wrong = false;
-            $this->feedback = 'correct';
             $this->history[] = 'correct';
             $this->advance();
         } elseif ($this->strict) {
+            // Strict: a wrong guess is final and we move on, so it's recorded.
             $this->status[$this->index] = 'wrong';
             $this->wrong = false;
-            $this->feedback = 'wrong';
             $this->history[] = 'wrong';
             $this->advance();
         } else {
+            // Lenient: stay on the flag for a retry — nothing recorded yet.
             $this->wrong = true;
-            $this->feedback = 'wrong';
-            $this->history[] = 'wrong';
         }
     }
 
@@ -125,7 +121,6 @@ class FlagQuiz extends Component
     {
         $this->status[$this->index] = 'skipped';
         $this->wrong = false;
-        $this->feedback = '';
         $this->advance();
     }
 
@@ -133,8 +128,15 @@ class FlagQuiz extends Component
     private function next(): void
     {
         $this->wrong = false;
-        $this->feedback = '';
         $this->advance();
+    }
+
+    /** End the game now — show the results screen, exactly as finishing all flags. */
+    private function finish(): void
+    {
+        $this->elapsed = time() - $this->startTime;
+        $this->wrong = false;
+        $this->phase = 'finished';
     }
 
     private function toggleShowFlags(): void
@@ -169,7 +171,9 @@ class FlagQuiz extends Component
         }
         $this->index = $pos;
         $this->wrong = false;
-        $this->feedback = '';
+        // Jumping moved focus to the clicked flag — return it to the input
+        // (runs after the DOM patch is applied).
+        Js::run("var i=document.getElementById('fq-input'); if (i) { i.focus(); }");
     }
 
     private function current(): Country
@@ -271,18 +275,15 @@ class FlagQuiz extends Component
     private function buildLeftPanel(int $answered, int $total, int $score, int $right, int $wrong, string $time, bool $showGrid): UIElement
     {
         $children = [
-            new ScoreBar($answered, $total, $score, $right, $wrong, $time),
+            new ScoreBar($answered, $total, $score, $right, $wrong, $time, array_slice($this->history, -5)),
             new GuessPanel(
                 $this->current(),
                 $this->wrong,
-                $this->feedback,
-                $this->tick,
-                array_slice($this->history, -5),
                 fn(string $value) => $this->handleGuess($value),
                 fn() => $this->skip(),
                 fn() => $this->next(),
             ),
-            new BrandInfo(fn() => $this->phase = 'start'),
+            new BrandInfo(fn() => $this->phase = 'start', fn() => $this->finish()),
         ];
 
         // Built as one fluent chain per branch so the CssExtractor harvests the
@@ -322,15 +323,21 @@ class FlagQuiz extends Component
         return $out;
     }
 
-    private function buildFinished(int $total): UIElement
+    private function buildFinished(int $total): VNode
     {
         $all = Country::all();
         $correct = count(array_filter($this->status, fn(string $s) => $s === 'correct'));
-        $accuracy = $total > 0 ? (int)round($correct / $total * 100) : 0;
+        $answered = count(array_filter($this->status, fn(string $s) => $s !== ''));
+        // Accuracy over what was actually attempted (so an early "Done" isn't
+        // diluted by flags never reached).
+        $accuracy = $answered > 0 ? (int)round($correct / $answered * 100) : 0;
 
+        // The flags actually got wrong or gave up on — not the ones never
+        // reached (status '' when finishing early).
         $missed = [];
         foreach ($this->order as $pos => $countryIdx) {
-            if (($this->status[$pos] ?? '') !== 'correct') {
+            $status = $this->status[$pos] ?? '';
+            if ($status === 'wrong' || $status === 'skipped') {
                 $missed[] = $all[$countryIdx];
             }
         }

@@ -19,7 +19,10 @@ use Samples\FlagQuiz\Palette;
  */
 class BrandInfo extends Component
 {
-    public function __construct(private Closure $onStartOver) {}
+    public function __construct(
+        private Closure $onStartOver,
+        private Closure $onDone,
+    ) {}
 
     protected function build(): VNode
     {
@@ -46,17 +49,32 @@ class BrandInfo extends Component
                             ->fontSize(FontSize::ExtraSmall)
                             ->color(Palette::subtle()),
                     ),
-                UI::button('Start over')
-                    ->background(Palette::white())
-                    ->color(Palette::subtle())
-                    ->bordered()
-                    ->borderColor(Palette::border())
-                    ->rounded(Unit::px(10))
-                    ->padding(x: Unit::px(18), y: Unit::px(9))
-                    ->fontSize(FontSize::Small)
-                    ->weight(FontWeight::SemiBold)
-                    ->clickable()
-                    ->onClick(fn() => ($this->onStartOver)()),
+                UI::row()
+                    ->alignMiddle()
+                    ->gap(Unit::px(9))
+                    ->content(
+                        UI::button('Start over')
+                            ->background(Palette::white())
+                            ->color(Palette::subtle())
+                            ->bordered()
+                            ->borderColor(Palette::border())
+                            ->rounded(Unit::px(10))
+                            ->padding(x: Unit::px(18), y: Unit::px(9))
+                            ->fontSize(FontSize::Small)
+                            ->weight(FontWeight::SemiBold)
+                            ->clickable()
+                            ->onClick(fn() => ($this->onStartOver)()),
+                        UI::button('Done')
+                            ->background(Palette::ink())
+                            ->color(Palette::white())
+                            ->borderNone()
+                            ->rounded(Unit::px(10))
+                            ->padding(x: Unit::px(18), y: Unit::px(9))
+                            ->fontSize(FontSize::Small)
+                            ->weight(FontWeight::SemiBold)
+                            ->clickable()
+                            ->onClick(fn() => ($this->onDone)()),
+                    ),
             );
     }
 }

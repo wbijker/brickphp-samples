@@ -36,7 +36,9 @@ class FlagGrid extends Component
     {
         $cells = [];
         foreach ($this->items as $item) {
-            $cells[] = $this->cell($item['pos'], $item['country'], $item['pos'] === $this->selected);
+            $cells[] = $item['pos'] === $this->selected
+                ? $this->selectedCell($item['pos'], $item['country'])
+                : $this->cell($item['pos'], $item['country']);
         }
 
         return UI::column()
@@ -55,30 +57,33 @@ class FlagGrid extends Component
                         UI::text(count($this->items) . ' left · tap a flag to jump there')
                             ->fontSize(FontSize::ExtraSmall)->color(Palette::footerCount()),
                     ),
-                UI::row()
-                    ->wrap()
+                // The scroll area grows/scrolls; the wrapping cells inside keep
+                // their natural height so flags pack at the top rather than
+                // stretching to fill the panel.
+                UI::column()
                     ->grow()
+                    ->padding(2)
                     ->minHeight(Unit::px(0))
-                    ->maxHeight(Unit::full())
                     ->scrollableY()
-                    ->gap(Unit::px(10))
-                    ->content(...$cells),
+                    ->content(
+                        UI::row()
+                            ->wrap()
+                            ->alignTop()
+                            ->gap(Unit::px(10))
+                            ->content(...$cells),
+                    ),
             );
     }
 
-    private function cell(int $pos, Country $country, bool $selected): UIElement
+    private function cell(int $pos, Country $country): UIElement
     {
-        // One fluent chain so the CssExtractor can harvest every class.
-        // Selected state uses harvestable Color/Shadow ternaries; the hover
-        // lift is a literal scale + border so it always emits.
         return UI::row()
             ->width(Unit::px(72))
             ->aspectRatio(3, 2)
-            ->background($selected ? Palette::blueWash() : Palette::white())
+            ->background(Palette::white())
             ->bordered()
-            ->borderColor($selected ? Palette::blue() : Palette::track())
+            ->borderColor(Palette::track())
             ->borderColor(Palette::blue(), Pseudo::hover())
-            ->shadow($selected ? Shadow::Medium : Shadow::None)
             ->rounded(Unit::px(7))
             ->clipContent()
             ->alignCenter()
@@ -88,11 +93,41 @@ class FlagGrid extends Component
             ->clickable()
             ->key('cell-' . $pos)
             ->onClick(fn() => ($this->onJump)($pos))
-            ->content(
-                UI::image($country->thumbUrl(), '')
-                    ->maxWidth(Unit::percent(88))
-                    ->maxHeight(Unit::percent(88))
-                    ->objectContain()
-            );
+            ->content($this->thumb($country));
+    }
+
+    /**
+     * The current flag, made clearly distinct: scaled up, a thick blue ring,
+     * a blue wash and a strong shadow. Written as its own literal chain so the
+     * `scale`/`border-2` classes are harvested (they can't come from a ternary).
+     */
+    private function selectedCell(int $pos, Country $country): UIElement
+    {
+        return UI::row()
+            ->width(Unit::px(72))
+            ->aspectRatio(3, 2)
+            ->background(Palette::blueWash())
+            ->bordered(2)
+            ->borderColor(Palette::blue())
+            ->rounded(Unit::px(8))
+            ->clipContent()
+            ->alignCenter()
+            ->alignMiddle()
+            ->animated(160)
+            ->scale(118)
+            ->zIndex(10)
+            ->shadow(Shadow::ExtraLarge)
+            ->clickable()
+            ->key('cell-' . $pos)
+            ->onClick(fn() => ($this->onJump)($pos))
+            ->content($this->thumb($country));
+    }
+
+    private function thumb(Country $country): UIElement
+    {
+        return UI::image($country->thumbUrl(), '')
+            ->maxWidth(Unit::percent(88))
+            ->maxHeight(Unit::percent(88))
+            ->objectContain();
     }
 }

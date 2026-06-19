@@ -10,13 +10,12 @@ use BrickPHP\VNode\VNode;
 /**
  * Flagdle — a "name the flag against the clock" quiz.
  *
- * Ported from the "Flag Quiz" Claude Design project. The UI is built from
- * BrickPHP's typed UI constructs (UI::column/row/text/image/…, Color, Unit,
- * FontSize, FontWeight, Shadow, Pseudo). The one exception is the answer
- * feedback: a green check / red cross that pops in and fades out on its own
- * needs a CSS @keyframes (a server round-trip has no client timer, and the
- * construct transitions only animate on a second render), so a single keyframe
- * is registered here and applied via the `fq-feedback` class.
+ * Ported from the "Flag Quiz" Claude Design project. The UI is built entirely
+ * from BrickPHP's typed UI constructs (UI::column/row/text/image/…, Color,
+ * Unit, FontSize, FontWeight, Shadow, Pseudo). The one bit of hand-written
+ * code is a tiny keyboard script: the framework dispatches every keydown to the
+ * server, so to keep typing client-side we handle the "pass" keys here and only
+ * round-trip on those.
  */
 class FlagQuizApp extends App
 {
@@ -32,27 +31,30 @@ class FlagQuizApp extends App
 
     protected function registerAssets(App $app): void
     {
-        // Pop in, hold briefly, then fade away — ends hidden (fill: forwards).
+        // A quick scale "pop" used to flag a changed value (the right / wrong
+        // tallies). Re-keying the element on change restarts the animation.
         $app->addStyleInline(<<<'CSS'
-            @keyframes fq-feedback {
-                0%   { opacity: 0; transform: scale(0.4); }
-                15%  { opacity: 1; transform: scale(1.12); }
-                35%  { opacity: 1; transform: scale(1); }
-                65%  { opacity: 1; transform: scale(1); }
-                100% { opacity: 0; transform: scale(1.06); }
+            @keyframes fq-pop {
+                0%   { transform: scale(1); }
+                30%  { transform: scale(1.5); }
+                100% { transform: scale(1); }
             }
-            .fq-feedback { animation: fq-feedback 1s ease-out forwards; pointer-events: none; }
+            .fq-pop { display: inline-block; animation: fq-pop .45s ease; }
             CSS);
 
-        // Keyboard is handled on the client; only Enter and Escape reach the
-        // server. Enter already submits via the field's change event — typing
-        // never round-trips. Escape clicks the hidden "next" button so a server
-        // request only fires on that key (no per-keystroke traffic).
+        // Keyboard is handled on the client; only Enter and the pass keys reach
+        // the server. Enter already submits via the field's change event, so
+        // typing never round-trips. Escape (anywhere) and Tab (while typing in
+        // the input) click the hidden "next" button — a server request fires
+        // only on those keys, never per keystroke.
         $app->addScriptInline(<<<'JS'
             document.addEventListener('keydown', function (e) {
-                if (e.key !== 'Escape') return;
+                if (e.key !== 'Escape' && e.key !== 'Tab') return;
                 var next = document.getElementById('fq-next');
-                if (next) { e.preventDefault(); next.click(); }
+                if (!next) return;
+                if (e.key === 'Tab' && !(document.activeElement && document.activeElement.tagName === 'INPUT')) return;
+                e.preventDefault();
+                next.click();
             });
             JS);
     }
