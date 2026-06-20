@@ -57,51 +57,37 @@ class StartScreen extends Component
 
     protected function build(): VNode
     {
+        // One single scrolling column: every section is just a stacked row, the
+        // Start button included. No pinned footer or vertical centering layered
+        // over the content. Roomier padding from the sm breakpoint up.
         return UI::column()
             ->grow()
             ->minHeight(Unit::em(0))
+            ->scrollableY()
+            ->alignCenter()
+            ->padding(Unit::px(24))
+            ->padding(Unit::px(40), Pseudo::sm())
             ->content(
-                // Scrolling content. Roomier padding from the sm breakpoint up.
                 UI::column()
-                    ->grow()
-                    ->minHeight(Unit::em(0))
-                    ->scrollableY()
+                    ->width(Unit::full())
+                    ->maxWidth(Unit::px(460))
                     ->alignCenter()
-                    ->alignMiddle()
-                    ->padding(Unit::px(24))
-                    ->padding(Unit::px(40), Pseudo::sm())
+                    ->gap(Unit::px(24))
                     ->content(
                         UI::column()
-                            ->width(Unit::full())
-                            ->maxWidth(Unit::px(460))
                             ->alignCenter()
-                            ->gap(Unit::px(24))
+                            ->gap(Unit::px(12))
                             ->content(
-                                UI::column()
-                                    ->alignCenter()
-                                    ->gap(Unit::px(12))
-                                    ->content(
-                                        new Logo(true),
-                                        UI::text('Flagdle')
-                                            ->fontSize(FontSize::FourXL)->fontSize(FontSize::FiveXL, Pseudo::sm())
-                                            ->weight(FontWeight::SemiBold)->center(),
-                                        UI::text('Learn the flags and countries of the world.')
-                                            ->center()->fontSize(FontSize::Base)->color(Palette::subtle()),
-                                    ),
-                                $this->modeChooser(),
-                                $this->continentPicker(),
-                                $this->settings(),
-                            )
-                    ),
-                // Pinned bottom bar.
-                UI::row()
-                    ->noShrink()
-                    ->bordered(top: 1)
-                    ->borderColor(Palette::border())
-                    ->background(Palette::white())
-                    ->padding(Unit::px(16))
-                    ->padding(Unit::px(20), Pseudo::sm())
-                    ->content(
+                                new Logo(true),
+                                UI::text('Flagdle')
+                                    ->fontSize(FontSize::FourXL)->fontSize(FontSize::FiveXL, Pseudo::sm())
+                                    ->weight(FontWeight::SemiBold)->center(),
+                                UI::text('Learn the flags and countries of the world.')
+                                    ->center()->fontSize(FontSize::Base)->color(Palette::subtle()),
+                            ),
+                        $this->modeChooser(),
+                        $this->continentPicker(),
+                        $this->settings(),
                         UI::button('Start Quiz')
                             ->width(Unit::full())
                             ->background(Palette::ink())
@@ -114,7 +100,7 @@ class StartScreen extends Component
                             ->shadow(Shadow::Large)
                             ->clickable()
                             ->onClick(fn() => ($this->onStart)()),
-                    ),
+                    )
             );
     }
 
