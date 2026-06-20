@@ -61,8 +61,7 @@ enum FlagSort: string
             self::Color => $traits->colorKey(),
             self::Shape => $traits->shape->value,
             self::ShapeColor => $traits->shape->value . '|' . $traits->colorKey(),
-            // Zero-padded so group 2 sorts before group 10 (string compare).
-            self::Similarity => sprintf('%03d', FlagSimilarity::groupFor($country->code)),
+            self::Similarity => $traits->similarityKey(),
             self::Continent => $country->continent->value,
         };
     }
