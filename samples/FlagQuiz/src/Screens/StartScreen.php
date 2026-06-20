@@ -79,7 +79,7 @@ class StartScreen extends Component
                             ->gap(Unit::px(12))
                             ->content(
                                 new Logo(true),
-                                UI::text('Flagdle')
+                                UI::text('Vexi')
                                     ->fontSize(FontSize::FourXL)->fontSize(FontSize::FiveXL, Pseudo::sm())
                                     ->weight(FontWeight::SemiBold)->center(),
                                 UI::text('Learn the flags and countries of the world.')

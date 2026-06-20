@@ -13,7 +13,7 @@ use Samples\FlagQuiz\Logo;
 use Samples\FlagQuiz\Palette;
 
 /**
- * The footer pinned to the bottom of the left panel: the Flagdle logo and
+ * The footer pinned to the bottom of the left panel: the Vexi logo and
  * wordmark, a one-line tagline, and a "Start over" button that restarts the
  * quiz with a fresh shuffle.
  */
@@ -42,7 +42,7 @@ class BrandInfo extends Component
                             ->gap(Unit::px(9))
                             ->content(
                                 new Logo(),
-                                UI::text('Flagdle')->weight(FontWeight::SemiBold)->fontSize(FontSize::Base),
+                                UI::text('Vexi')->weight(FontWeight::SemiBold)->fontSize(FontSize::Base),
                             ),
                         UI::text('Guess every country flag against the clock.')
                             ->center()

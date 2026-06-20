@@ -25,7 +25,7 @@ use Samples\FlagQuiz\Screens\FinishedScreen;
 use Samples\FlagQuiz\Screens\StartScreen;
 
 /**
- * Flagdle — the game's stateful core. Holds the session state and the rules,
+ * Vexi — the game's stateful core. Holds the session state and the rules,
  * and composes the screens/components ({@see StartScreen}, {@see ScoreBar},
  * {@see GuessPanel}, {@see FlagGrid}, {@see FinishedScreen}) that render it.
  * Country data lives in {@see Country}, colours in {@see Palette}. The phase,

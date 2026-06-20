@@ -5,7 +5,7 @@ namespace Samples\FlagQuiz;
 use BrickPHP\UI\Color;
 
 /**
- * The Flagdle colour scheme — the design's warm-neutral + blue palette mapped
+ * The Vexi colour scheme — the design's warm-neutral + blue palette mapped
  * to BrickPHP's named ramps (stone/blue/red). Centralised here so every
  * component shares one source of truth; the CssExtractor resolves these static
  * calls (via each file's `use` import) and harvests the literals below, so the

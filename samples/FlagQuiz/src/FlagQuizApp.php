@@ -8,7 +8,7 @@ use BrickPHP\VNode\App;
 use BrickPHP\VNode\VNode;
 
 /**
- * Flagdle — a "name the flag against the clock" quiz.
+ * Vexi — a "name the flag against the clock" quiz.
  *
  * Ported from the "Flag Quiz" Claude Design project. The UI is built entirely
  * from BrickPHP's typed UI constructs (UI::column/row/text/image/…, Color,
@@ -21,7 +21,7 @@ class FlagQuizApp extends App
 {
     public function title(): string
     {
-        return 'Flagdle — Flag Quiz';
+        return 'Vexi — Flag Quiz';
     }
 
     public function state(): StateManager

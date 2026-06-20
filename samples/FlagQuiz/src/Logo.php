@@ -9,7 +9,7 @@ use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 
 /**
- * The Flagdle mark: a small blue "flag" with a darker hoist stripe. Two sizes —
+ * The Vexi mark: a small blue "flag" with a darker hoist stripe. Two sizes —
  * the large hero variant for the start screen and the small inline variant for
  * the brand info. Each variant inlines its size literals so the CssExtractor
  * can harvest them (a passed-in Unit would not be a literal it can read).
