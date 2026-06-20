@@ -48,8 +48,15 @@ class FlagQuiz extends Component
 
     private GamePhase $phase = GamePhase::Start;
 
-    /** Chosen game mode. */
+    /** The mode currently being played (drives routing). */
     private GameMode $mode = GameMode::Flags;
+
+    /**
+     * The quiz mode selected on the start screen (Flags or Location only).
+     * Explore is launched separately via its link, so it never lands here —
+     * keeping the start screen's card selection and settings always valid.
+     */
+    private GameMode $quizMode = GameMode::Flags;
 
     /** Explore mode: ISO-2 of the country currently focused on the map. */
     private string $exploreIso = '';
@@ -91,6 +98,7 @@ class FlagQuiz extends Component
 
         $this->useState($this->phase);
         $this->useState($this->mode);
+        $this->useState($this->quizMode);
         $this->useState($this->exploreIso);
         $this->useState($this->autoZoom);
         $this->useState($this->showFlags);
@@ -108,6 +116,20 @@ class FlagQuiz extends Component
     // ============================================================
     // Game logic
     // ============================================================
+
+    /** Start the selected quiz mode (Flags or Location). */
+    private function startQuiz(): void
+    {
+        $this->mode = $this->quizMode;
+        $this->startGame();
+    }
+
+    /** Jump straight into free Explore mode (its own single-click link). */
+    private function startExplore(): void
+    {
+        $this->mode = GameMode::Explore;
+        $this->startGame();
+    }
 
     private function startGame(): void
     {
@@ -354,15 +376,16 @@ class FlagQuiz extends Component
                     $this->phase === GamePhase::Playing => $this->buildPlay($total, $answered),
                     default => new StartScreen(
                         $total,
-                        $this->mode,
+                        $this->quizMode,
                         $this->showFlags,
                         $this->strict,
                         $this->continents,
-                        fn() => $this->startGame(),
-                        fn(GameMode $mode) => $this->mode = $mode,
+                        fn() => $this->startQuiz(),
+                        fn(GameMode $mode) => $this->quizMode = $mode,
                         fn() => $this->toggleShowFlags(),
                         fn() => $this->toggleStrict(),
                         fn(Continent $c) => $this->toggleContinent($c),
+                        fn() => $this->startExplore(),
                     ),
                 }
             );

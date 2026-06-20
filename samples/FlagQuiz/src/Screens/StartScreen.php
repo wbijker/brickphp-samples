@@ -27,16 +27,18 @@ use Samples\FlagQuiz\Palette;
 class StartScreen extends Component
 {
     /**
-     * @param Continent[] $continents     currently selected continents
+     * @param GameMode    $quizMode        selected quiz mode (Flags or Location)
+     * @param Continent[] $continents      currently selected continents
      * @param Closure $onStart            fn(): void
      * @param Closure $onSelectMode       fn(GameMode $mode): void
      * @param Closure $onToggleShowFlags  fn(): void
      * @param Closure $onToggleStrict     fn(): void
      * @param Closure $onToggleContinent  fn(Continent $continent): void
+     * @param Closure $onExplore          fn(): void — launch Explore directly
      */
     public function __construct(
         private int $count,
-        private GameMode $mode,
+        private GameMode $quizMode,
         private bool $showFlags,
         private bool $strict,
         private array $continents,
@@ -45,6 +47,7 @@ class StartScreen extends Component
         private Closure $onToggleShowFlags,
         private Closure $onToggleStrict,
         private Closure $onToggleContinent,
+        private Closure $onExplore,
     ) {}
 
     protected function build(): VNode
@@ -82,7 +85,7 @@ class StartScreen extends Component
                                     ),
                                 $this->modeChooser(),
                                 $this->continentPicker(),
-                                ...($this->mode->hasSettings() ? [$this->settings()] : []),
+                                $this->settings(),
                             )
                     ),
                 // Pinned bottom bar.
@@ -113,8 +116,8 @@ class StartScreen extends Component
     private function modeChooser(): UIElement
     {
         $cards = [];
-        foreach (GameMode::cases() as $mode) {
-            $cards[] = $mode === $this->mode
+        foreach (GameMode::quizModes() as $mode) {
+            $cards[] = $mode === $this->quizMode
                 ? $this->modeCardSelected($mode)
                 : $this->modeCard($mode);
         }
@@ -123,8 +126,26 @@ class StartScreen extends Component
             ->width(Unit::full())
             ->gap(Unit::px(10))
             ->content(
-                UI::text('Game mode')
-                    ->fontSize(FontSize::ExtraSmall)->uppercase()->color(Palette::labelMuted()),
+                // Header: section label on the left, the Explore shortcut on
+                // the right (a single click jumps straight into Explore mode).
+                UI::row()
+                    ->alignMiddle()
+                    ->alignBetween()
+                    ->gap(Unit::px(8))
+                    ->content(
+                        UI::text('Game mode')
+                            ->fontSize(FontSize::ExtraSmall)->uppercase()->color(Palette::labelMuted()),
+                        UI::button('Explore the map →')
+                            ->noShrink()
+                            ->borderNone()
+                            ->background(Palette::transparent())
+                            ->color(Palette::blue())
+                            ->weight(FontWeight::SemiBold)
+                            ->fontSize(FontSize::Small)
+                            ->padding(Unit::none())
+                            ->clickable()
+                            ->onClick(fn() => ($this->onExplore)()),
+                    ),
                 UI::row()->wrap()->gap(Unit::px(10))->content(...$cards),
             );
     }
@@ -241,8 +262,8 @@ class StartScreen extends Component
             ->clipContent()
             ->content(
                 new Toggle(
-                    $this->mode->navToggleLabel(),
-                    $this->mode->navToggleDescription(),
+                    $this->quizMode->navToggleLabel(),
+                    $this->quizMode->navToggleDescription(),
                     $this->showFlags,
                     $this->onToggleShowFlags,
                 ),

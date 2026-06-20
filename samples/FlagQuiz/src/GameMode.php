@@ -13,6 +13,17 @@ enum GameMode: string
     case Location = 'location';
     case Explore = 'explore';
 
+    /**
+     * The selectable quiz modes shown as cards on the start screen. Explore is
+     * deliberately excluded — it's launched from a single-click link instead.
+     *
+     * @return self[]
+     */
+    public static function quizModes(): array
+    {
+        return [self::Flags, self::Location];
+    }
+
     /** Title shown on the mode card. */
     public function title(): string
     {
