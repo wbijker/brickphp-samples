@@ -13,6 +13,7 @@ final class Country
     public function __construct(
         public readonly string $code,
         public readonly string $name,
+        public readonly Continent $continent,
         public readonly array $aliases = [],
     ) {}
 
@@ -82,56 +83,72 @@ final class Country
             return $cache;
         }
 
-        $raw = [
-            ['af', 'Afghanistan'], ['al', 'Albania'], ['dz', 'Algeria'], ['ad', 'Andorra'], ['ao', 'Angola'],
-            ['ag', 'Antigua and Barbuda', ['antigua']], ['ar', 'Argentina'], ['am', 'Armenia'], ['au', 'Australia'], ['at', 'Austria'],
-            ['az', 'Azerbaijan'], ['bs', 'Bahamas'], ['bh', 'Bahrain'], ['bd', 'Bangladesh'], ['bb', 'Barbados'],
-            ['by', 'Belarus'], ['be', 'Belgium'], ['bz', 'Belize'], ['bj', 'Benin'], ['bt', 'Bhutan'],
-            ['bo', 'Bolivia'], ['ba', 'Bosnia and Herzegovina', ['bosnia']], ['bw', 'Botswana'], ['br', 'Brazil'], ['bn', 'Brunei'],
-            ['bg', 'Bulgaria'], ['bf', 'Burkina Faso'], ['bi', 'Burundi'], ['cv', 'Cabo Verde', ['cape verde']], ['kh', 'Cambodia'],
-            ['cm', 'Cameroon'], ['ca', 'Canada'], ['cf', 'Central African Republic', ['car']], ['td', 'Chad'], ['cl', 'Chile'],
-            ['cn', 'China'], ['co', 'Colombia'], ['km', 'Comoros'], ['cg', 'Republic of the Congo', ['congo', 'congo brazzaville', 'republic of congo']],
-            ['cd', 'DR Congo', ['dr congo', 'drc', 'democratic republic of the congo', 'democratic republic of congo', 'congo kinshasa', 'zaire']],
-            ['cr', 'Costa Rica'], ['hr', 'Croatia'], ['cu', 'Cuba'], ['cy', 'Cyprus'], ['cz', 'Czechia', ['czech republic']],
-            ['dk', 'Denmark'], ['dj', 'Djibouti'], ['dm', 'Dominica'], ['do', 'Dominican Republic'], ['ec', 'Ecuador'],
-            ['eg', 'Egypt'], ['sv', 'El Salvador'], ['gq', 'Equatorial Guinea'], ['er', 'Eritrea'], ['ee', 'Estonia'],
-            ['sz', 'Eswatini', ['swaziland']], ['et', 'Ethiopia'], ['fj', 'Fiji'], ['fi', 'Finland'], ['fr', 'France'],
-            ['ga', 'Gabon'], ['gm', 'Gambia'], ['ge', 'Georgia'], ['de', 'Germany'], ['gh', 'Ghana'],
-            ['gr', 'Greece'], ['gd', 'Grenada'], ['gt', 'Guatemala'], ['gn', 'Guinea'], ['gw', 'Guinea-Bissau'],
-            ['gy', 'Guyana'], ['ht', 'Haiti'], ['hn', 'Honduras'], ['hu', 'Hungary'], ['is', 'Iceland'],
-            ['in', 'India'], ['id', 'Indonesia'], ['ir', 'Iran'], ['iq', 'Iraq'], ['ie', 'Ireland'],
-            ['il', 'Israel'], ['it', 'Italy'], ['jm', 'Jamaica'], ['jp', 'Japan'], ['jo', 'Jordan'],
-            ['kz', 'Kazakhstan'], ['ke', 'Kenya'], ['ki', 'Kiribati'], ['xk', 'Kosovo'], ['kw', 'Kuwait'],
-            ['kg', 'Kyrgyzstan'], ['la', 'Laos'], ['lv', 'Latvia'], ['lb', 'Lebanon'], ['ls', 'Lesotho'],
-            ['lr', 'Liberia'], ['ly', 'Libya'], ['li', 'Liechtenstein'], ['lt', 'Lithuania'], ['lu', 'Luxembourg'],
-            ['mg', 'Madagascar'], ['mw', 'Malawi'], ['my', 'Malaysia'], ['mv', 'Maldives'], ['ml', 'Mali'],
-            ['mt', 'Malta'], ['mh', 'Marshall Islands'], ['mr', 'Mauritania'], ['mu', 'Mauritius'], ['mx', 'Mexico'],
-            ['fm', 'Micronesia'], ['md', 'Moldova'], ['mc', 'Monaco'], ['mn', 'Mongolia'], ['me', 'Montenegro'],
-            ['ma', 'Morocco'], ['mz', 'Mozambique'], ['mm', 'Myanmar', ['burma']], ['na', 'Namibia'], ['nr', 'Nauru'],
-            ['np', 'Nepal'], ['nl', 'Netherlands', ['holland']], ['nz', 'New Zealand'], ['ni', 'Nicaragua'], ['ne', 'Niger'],
-            ['ng', 'Nigeria'], ['kp', 'North Korea'], ['mk', 'North Macedonia', ['macedonia']], ['no', 'Norway'], ['om', 'Oman'],
-            ['pk', 'Pakistan'], ['pw', 'Palau'], ['ps', 'Palestine'], ['pa', 'Panama'], ['pg', 'Papua New Guinea'],
-            ['py', 'Paraguay'], ['pe', 'Peru'], ['ph', 'Philippines'], ['pl', 'Poland'], ['pt', 'Portugal'],
-            ['qa', 'Qatar'], ['ro', 'Romania'], ['ru', 'Russia', ['russian federation']], ['rw', 'Rwanda'],
-            ['kn', 'Saint Kitts and Nevis', ['st kitts and nevis', 'st kitts']], ['lc', 'Saint Lucia', ['st lucia']],
-            ['vc', 'Saint Vincent and the Grenadines', ['st vincent and the grenadines', 'st vincent']], ['ws', 'Samoa'], ['sm', 'San Marino'],
-            ['st', 'Sao Tome and Principe'], ['sa', 'Saudi Arabia'], ['sn', 'Senegal'], ['rs', 'Serbia'], ['sc', 'Seychelles'],
-            ['sl', 'Sierra Leone'], ['sg', 'Singapore'], ['sk', 'Slovakia'], ['si', 'Slovenia'], ['sb', 'Solomon Islands'],
-            ['so', 'Somalia'], ['za', 'South Africa'], ['kr', 'South Korea'], ['ss', 'South Sudan'], ['es', 'Spain'],
-            ['lk', 'Sri Lanka'], ['sd', 'Sudan'], ['sr', 'Suriname'], ['se', 'Sweden'], ['ch', 'Switzerland'],
-            ['sy', 'Syria'], ['tw', 'Taiwan'], ['tj', 'Tajikistan'], ['tz', 'Tanzania'], ['th', 'Thailand'],
-            ['tl', 'Timor-Leste', ['east timor']], ['tg', 'Togo'], ['to', 'Tonga'], ['tt', 'Trinidad and Tobago', ['trinidad']], ['tn', 'Tunisia'],
-            ['tr', 'Turkey', ['turkiye']], ['tm', 'Turkmenistan'], ['tv', 'Tuvalu'], ['ug', 'Uganda'], ['ua', 'Ukraine'],
-            ['ae', 'United Arab Emirates', ['uae', 'emirates']], ['gb', 'United Kingdom', ['uk', 'britain', 'great britain']],
-            ['us', 'United States', ['usa', 'us', 'america', 'united states of america']], ['uy', 'Uruguay'], ['uz', 'Uzbekistan'],
-            ['vu', 'Vanuatu'], ['va', 'Vatican City', ['vatican', 'holy see']], ['ve', 'Venezuela'], ['vn', 'Vietnam'], ['ye', 'Yemen'],
-            ['zm', 'Zambia'], ['zw', 'Zimbabwe'],
+        // Grouped by continent so each country's region is auditable at a
+        // glance. Each row is [code, name] or [code, name, aliases]. The list
+        // is flattened and sorted by name below (the game shuffles regardless).
+        $groups = [
+            [Continent::Africa, [
+                ['dz', 'Algeria'], ['ao', 'Angola'], ['bj', 'Benin'], ['bw', 'Botswana'], ['bf', 'Burkina Faso'],
+                ['bi', 'Burundi'], ['cv', 'Cabo Verde', ['cape verde']], ['cm', 'Cameroon'], ['cf', 'Central African Republic', ['car']],
+                ['td', 'Chad'], ['km', 'Comoros'], ['cg', 'Republic of the Congo', ['congo', 'congo brazzaville', 'republic of congo']],
+                ['cd', 'DR Congo', ['dr congo', 'drc', 'democratic republic of the congo', 'democratic republic of congo', 'congo kinshasa', 'zaire']],
+                ['dj', 'Djibouti'], ['eg', 'Egypt'], ['gq', 'Equatorial Guinea'], ['er', 'Eritrea'], ['sz', 'Eswatini', ['swaziland']],
+                ['et', 'Ethiopia'], ['ga', 'Gabon'], ['gm', 'Gambia'], ['gh', 'Ghana'], ['gn', 'Guinea'], ['gw', 'Guinea-Bissau'],
+                ['ke', 'Kenya'], ['ls', 'Lesotho'], ['lr', 'Liberia'], ['ly', 'Libya'], ['mg', 'Madagascar'], ['mw', 'Malawi'],
+                ['ml', 'Mali'], ['mr', 'Mauritania'], ['mu', 'Mauritius'], ['ma', 'Morocco'], ['mz', 'Mozambique'], ['na', 'Namibia'],
+                ['ne', 'Niger'], ['ng', 'Nigeria'], ['rw', 'Rwanda'], ['st', 'Sao Tome and Principe'], ['sn', 'Senegal'],
+                ['sc', 'Seychelles'], ['sl', 'Sierra Leone'], ['so', 'Somalia'], ['za', 'South Africa'], ['ss', 'South Sudan'],
+                ['sd', 'Sudan'], ['tz', 'Tanzania'], ['tg', 'Togo'], ['tn', 'Tunisia'], ['ug', 'Uganda'], ['zm', 'Zambia'], ['zw', 'Zimbabwe'],
+            ]],
+            [Continent::Asia, [
+                ['af', 'Afghanistan'], ['am', 'Armenia'], ['az', 'Azerbaijan'], ['bh', 'Bahrain'], ['bd', 'Bangladesh'],
+                ['bt', 'Bhutan'], ['bn', 'Brunei'], ['kh', 'Cambodia'], ['cn', 'China'], ['ge', 'Georgia'], ['in', 'India'],
+                ['id', 'Indonesia'], ['ir', 'Iran'], ['iq', 'Iraq'], ['il', 'Israel'], ['jp', 'Japan'], ['jo', 'Jordan'],
+                ['kz', 'Kazakhstan'], ['kw', 'Kuwait'], ['kg', 'Kyrgyzstan'], ['la', 'Laos'], ['lb', 'Lebanon'], ['my', 'Malaysia'],
+                ['mv', 'Maldives'], ['mn', 'Mongolia'], ['mm', 'Myanmar', ['burma']], ['np', 'Nepal'], ['kp', 'North Korea'],
+                ['om', 'Oman'], ['pk', 'Pakistan'], ['ps', 'Palestine'], ['ph', 'Philippines'], ['qa', 'Qatar'], ['sa', 'Saudi Arabia'],
+                ['sg', 'Singapore'], ['kr', 'South Korea'], ['lk', 'Sri Lanka'], ['sy', 'Syria'], ['tw', 'Taiwan'], ['tj', 'Tajikistan'],
+                ['th', 'Thailand'], ['tl', 'Timor-Leste', ['east timor']], ['tr', 'Turkey', ['turkiye']], ['tm', 'Turkmenistan'],
+                ['ae', 'United Arab Emirates', ['uae', 'emirates']], ['uz', 'Uzbekistan'], ['vn', 'Vietnam'], ['ye', 'Yemen'],
+            ]],
+            [Continent::Europe, [
+                ['al', 'Albania'], ['ad', 'Andorra'], ['at', 'Austria'], ['by', 'Belarus'], ['be', 'Belgium'],
+                ['ba', 'Bosnia and Herzegovina', ['bosnia']], ['bg', 'Bulgaria'], ['hr', 'Croatia'], ['cy', 'Cyprus'],
+                ['cz', 'Czechia', ['czech republic']], ['dk', 'Denmark'], ['ee', 'Estonia'], ['fi', 'Finland'], ['fr', 'France'],
+                ['de', 'Germany'], ['gr', 'Greece'], ['hu', 'Hungary'], ['is', 'Iceland'], ['ie', 'Ireland'], ['it', 'Italy'],
+                ['xk', 'Kosovo'], ['lv', 'Latvia'], ['li', 'Liechtenstein'], ['lt', 'Lithuania'], ['lu', 'Luxembourg'], ['mt', 'Malta'],
+                ['md', 'Moldova'], ['mc', 'Monaco'], ['me', 'Montenegro'], ['nl', 'Netherlands', ['holland']],
+                ['mk', 'North Macedonia', ['macedonia']], ['no', 'Norway'], ['pl', 'Poland'], ['pt', 'Portugal'], ['ro', 'Romania'],
+                ['ru', 'Russia', ['russian federation']], ['sm', 'San Marino'], ['rs', 'Serbia'], ['sk', 'Slovakia'], ['si', 'Slovenia'],
+                ['es', 'Spain'], ['se', 'Sweden'], ['ch', 'Switzerland'], ['ua', 'Ukraine'],
+                ['gb', 'United Kingdom', ['uk', 'britain', 'great britain']], ['va', 'Vatican City', ['vatican', 'holy see']],
+            ]],
+            [Continent::NorthAmerica, [
+                ['ag', 'Antigua and Barbuda', ['antigua']], ['bs', 'Bahamas'], ['bb', 'Barbados'], ['bz', 'Belize'], ['ca', 'Canada'],
+                ['cr', 'Costa Rica'], ['cu', 'Cuba'], ['dm', 'Dominica'], ['do', 'Dominican Republic'], ['sv', 'El Salvador'],
+                ['gd', 'Grenada'], ['gt', 'Guatemala'], ['ht', 'Haiti'], ['hn', 'Honduras'], ['jm', 'Jamaica'], ['mx', 'Mexico'],
+                ['ni', 'Nicaragua'], ['pa', 'Panama'], ['kn', 'Saint Kitts and Nevis', ['st kitts and nevis', 'st kitts']],
+                ['lc', 'Saint Lucia', ['st lucia']], ['vc', 'Saint Vincent and the Grenadines', ['st vincent and the grenadines', 'st vincent']],
+                ['tt', 'Trinidad and Tobago', ['trinidad']], ['us', 'United States', ['usa', 'us', 'america', 'united states of america']],
+            ]],
+            [Continent::SouthAmerica, [
+                ['ar', 'Argentina'], ['bo', 'Bolivia'], ['br', 'Brazil'], ['cl', 'Chile'], ['co', 'Colombia'], ['ec', 'Ecuador'],
+                ['gy', 'Guyana'], ['py', 'Paraguay'], ['pe', 'Peru'], ['sr', 'Suriname'], ['uy', 'Uruguay'], ['ve', 'Venezuela'],
+            ]],
+            [Continent::Oceania, [
+                ['au', 'Australia'], ['fj', 'Fiji'], ['ki', 'Kiribati'], ['mh', 'Marshall Islands'], ['fm', 'Micronesia'],
+                ['nr', 'Nauru'], ['nz', 'New Zealand'], ['pw', 'Palau'], ['pg', 'Papua New Guinea'], ['ws', 'Samoa'],
+                ['sb', 'Solomon Islands'], ['to', 'Tonga'], ['tv', 'Tuvalu'], ['vu', 'Vanuatu'],
+            ]],
         ];
 
-        $cache = array_map(
-            static fn(array $c) => new self($c[0], $c[1], $c[2] ?? []),
-            $raw,
-        );
+        $cache = [];
+        foreach ($groups as [$continent, $rows]) {
+            foreach ($rows as $c) {
+                $cache[] = new self($c[0], $c[1], $continent, $c[2] ?? []);
+            }
+        }
+        usort($cache, static fn(self $a, self $b) => strcmp($a->name, $b->name));
         return $cache;
     }
 }

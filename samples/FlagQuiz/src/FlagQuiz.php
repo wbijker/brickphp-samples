@@ -61,6 +61,9 @@ class FlagQuiz extends Component
     private bool $showFlags = true;
     private bool $strict = true;
 
+    /** @var Continent[] continents a game is restricted to (all by default) */
+    private array $continents = [];
+
     /** @var int[] shuffled indices into Country::all() */
     private array $order = [];
     private int $index = 0;
@@ -80,12 +83,19 @@ class FlagQuiz extends Component
 
     protected function initialize(): void
     {
+        // Default: every continent selected. Set before useState so a restored
+        // session subset (always non-empty) overrides this default.
+        if ($this->continents === []) {
+            $this->continents = Continent::cases();
+        }
+
         $this->useState($this->phase);
         $this->useState($this->mode);
         $this->useState($this->exploreIso);
         $this->useState($this->autoZoom);
         $this->useState($this->showFlags);
         $this->useState($this->strict);
+        $this->useState($this->continents);
         $this->useState($this->order);
         $this->useState($this->index);
         $this->useState($this->status);
@@ -108,9 +118,10 @@ class FlagQuiz extends Component
             return;
         }
 
-        $n = count(Country::all());
-        $this->order = range(0, $n - 1);
+        // Restrict the game to the chosen continents.
+        $this->order = $this->selectedCountryIndexes();
         shuffle($this->order);
+        $n = count($this->order);
         $this->index = 0;
         $this->status = array_fill(0, $n, Answer::Pending);
         $this->wrong = false;
@@ -228,6 +239,33 @@ class FlagQuiz extends Component
         $this->autoZoom = !$this->autoZoom;
     }
 
+    /** Add/remove a continent from the selection (never empties the set). */
+    private function toggleContinent(Continent $continent): void
+    {
+        if (in_array($continent, $this->continents, true)) {
+            if (count($this->continents) <= 1) {
+                return; // keep at least one continent in play
+            }
+            $this->continents = array_values(
+                array_filter($this->continents, fn(Continent $c) => $c !== $continent),
+            );
+        } else {
+            $this->continents[] = $continent;
+        }
+    }
+
+    /** @return int[] indices into Country::all() within the selected continents */
+    private function selectedCountryIndexes(): array
+    {
+        $out = [];
+        foreach (Country::all() as $i => $country) {
+            if (in_array($country->continent, $this->continents, true)) {
+                $out[] = $i;
+            }
+        }
+        return $out;
+    }
+
     private function advance(): void
     {
         $n = count($this->order);
@@ -289,7 +327,11 @@ class FlagQuiz extends Component
 
     protected function build(): VNode
     {
-        $total = count(Country::all());
+        // During a game the total is the filtered set in play (the shuffled
+        // order); on the start screen it's how many the current selection holds.
+        $total = $this->phase === GamePhase::Start
+            ? count($this->selectedCountryIndexes())
+            : count($this->order);
         $answered = $this->answeredCount();
         $isExplore = $this->phase === GamePhase::Playing && $this->mode === GameMode::Explore;
 
@@ -315,10 +357,12 @@ class FlagQuiz extends Component
                         $this->mode,
                         $this->showFlags,
                         $this->strict,
+                        $this->continents,
                         fn() => $this->startGame(),
                         fn(GameMode $mode) => $this->mode = $mode,
                         fn() => $this->toggleShowFlags(),
                         fn() => $this->toggleStrict(),
+                        fn(Continent $c) => $this->toggleContinent($c),
                     ),
                 }
             );
@@ -557,7 +601,10 @@ class FlagQuiz extends Component
                     ->direction(Direction::row(), Pseudo::lg())
                     ->content(
                         new CountryList(
-                            Country::all(),
+                            array_values(array_filter(
+                                Country::all(),
+                                fn(Country $c) => in_array($c->continent, $this->continents, true),
+                            )),
                             $this->exploreIso,
                             fn(string $iso) => $this->exploreSelect($iso),
                         ),

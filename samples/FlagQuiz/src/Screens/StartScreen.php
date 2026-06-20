@@ -13,32 +13,38 @@ use BrickPHP\UI\Unit;
 use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 use Samples\FlagQuiz\Components\Toggle;
+use Samples\FlagQuiz\Continent;
 use Samples\FlagQuiz\GameMode;
 use Samples\FlagQuiz\Logo;
 use Samples\FlagQuiz\Palette;
 
 /**
- * The landing screen: logo, title, the game-mode chooser and settings (in a
- * scrolling middle), with the Start button pinned to the bottom. The mode cards
- * are driven straight off {@see GameMode}, which carries each mode's own copy.
+ * The landing screen: logo, title, the game-mode chooser, the continent filter
+ * and settings (in a scrolling middle), with the Start button pinned to the
+ * bottom. The mode cards are driven straight off {@see GameMode} and the
+ * continent chips off {@see Continent}, which carry their own copy.
  */
 class StartScreen extends Component
 {
     /**
-     * @param Closure $onStart           fn(): void
-     * @param Closure $onSelectMode      fn(GameMode $mode): void
-     * @param Closure $onToggleShowFlags fn(): void
-     * @param Closure $onToggleStrict    fn(): void
+     * @param Continent[] $continents     currently selected continents
+     * @param Closure $onStart            fn(): void
+     * @param Closure $onSelectMode       fn(GameMode $mode): void
+     * @param Closure $onToggleShowFlags  fn(): void
+     * @param Closure $onToggleStrict     fn(): void
+     * @param Closure $onToggleContinent  fn(Continent $continent): void
      */
     public function __construct(
         private int $count,
         private GameMode $mode,
         private bool $showFlags,
         private bool $strict,
+        private array $continents,
         private Closure $onStart,
         private Closure $onSelectMode,
         private Closure $onToggleShowFlags,
         private Closure $onToggleStrict,
+        private Closure $onToggleContinent,
     ) {}
 
     protected function build(): VNode
@@ -75,6 +81,7 @@ class StartScreen extends Component
                                             ->center()->fontSize(FontSize::Base)->color(Palette::subtle()),
                                     ),
                                 $this->modeChooser(),
+                                $this->continentPicker(),
                                 ...($this->mode->hasSettings() ? [$this->settings()] : []),
                             )
                     ),
@@ -155,6 +162,71 @@ class StartScreen extends Component
             ->content(
                 UI::text($mode->title())->weight(FontWeight::SemiBold)->fontSize(FontSize::Base),
                 UI::text($mode->description())->fontSize(FontSize::ExtraSmall)->color(Palette::subtle()),
+            );
+    }
+
+    private function continentPicker(): UIElement
+    {
+        $chips = [];
+        foreach (Continent::cases() as $continent) {
+            $chips[] = in_array($continent, $this->continents, true)
+                ? $this->continentChipSelected($continent)
+                : $this->continentChip($continent);
+        }
+
+        return UI::column()
+            ->width(Unit::full())
+            ->gap(Unit::px(10))
+            ->content(
+                UI::row()
+                    ->alignMiddle()
+                    ->gap(Unit::px(8))
+                    ->content(
+                        UI::text('Continents')
+                            ->fontSize(FontSize::ExtraSmall)->uppercase()->color(Palette::labelMuted()),
+                        UI::text($this->count . ' countries')
+                            ->fontSize(FontSize::ExtraSmall)->color(Palette::footerCount()),
+                    ),
+                UI::row()->wrap()->gap(Unit::px(8))->content(...$chips),
+            );
+    }
+
+    // The two chip states are written as separate literal chains so the
+    // CssExtractor harvests both the selected (blue fill) and unselected
+    // (outline) class sets — a ternary would only emit one branch.
+    private function continentChip(Continent $continent): UIElement
+    {
+        return UI::row()
+            ->noShrink()
+            ->alignMiddle()
+            ->background(Palette::white())
+            ->bordered()
+            ->borderColor(Palette::border())
+            ->roundedFull()
+            ->padding(x: Unit::px(14), y: Unit::px(8))
+            ->clickable()
+            ->onClick(fn() => ($this->onToggleContinent)($continent))
+            ->content(
+                UI::text($continent->label())
+                    ->fontSize(FontSize::Small)->weight(FontWeight::Medium)->color(Palette::subtle()),
+            );
+    }
+
+    private function continentChipSelected(Continent $continent): UIElement
+    {
+        return UI::row()
+            ->noShrink()
+            ->alignMiddle()
+            ->background(Palette::blue())
+            ->bordered()
+            ->borderColor(Palette::blue())
+            ->roundedFull()
+            ->padding(x: Unit::px(14), y: Unit::px(8))
+            ->clickable()
+            ->onClick(fn() => ($this->onToggleContinent)($continent))
+            ->content(
+                UI::text($continent->label())
+                    ->fontSize(FontSize::Small)->weight(FontWeight::SemiBold)->color(Palette::white()),
             );
     }
 
