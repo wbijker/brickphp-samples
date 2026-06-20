@@ -94,6 +94,7 @@ final class Country
                 ['cd', 'DR Congo', ['dr congo', 'drc', 'democratic republic of the congo', 'democratic republic of congo', 'congo kinshasa', 'zaire']],
                 ['dj', 'Djibouti'], ['eg', 'Egypt'], ['gq', 'Equatorial Guinea'], ['er', 'Eritrea'], ['sz', 'Eswatini', ['swaziland']],
                 ['et', 'Ethiopia'], ['ga', 'Gabon'], ['gm', 'Gambia'], ['gh', 'Ghana'], ['gn', 'Guinea'], ['gw', 'Guinea-Bissau'],
+                ['ci', 'Ivory Coast', ['cote divoire', "cote d'ivoire", 'cote d ivoire']],
                 ['ke', 'Kenya'], ['ls', 'Lesotho'], ['lr', 'Liberia'], ['ly', 'Libya'], ['mg', 'Madagascar'], ['mw', 'Malawi'],
                 ['ml', 'Mali'], ['mr', 'Mauritania'], ['mu', 'Mauritius'], ['ma', 'Morocco'], ['mz', 'Mozambique'], ['na', 'Namibia'],
                 ['ne', 'Niger'], ['ng', 'Nigeria'], ['rw', 'Rwanda'], ['st', 'Sao Tome and Principe'], ['sn', 'Senegal'],

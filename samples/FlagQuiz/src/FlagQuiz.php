@@ -179,9 +179,16 @@ class FlagQuiz extends Component
      * can move between countries — clicking an unanswered one selects it as the
      * target. When off, you can't move, so a click is a guess of the current
      * target instead.
+     *
+     * In strict mode a wrong answer is final, so an errant map click would
+     * permanently mark the country wrong and advance. To avoid that, map clicks
+     * are discarded entirely in strict mode and do nothing.
      */
     private function handlePick(string $iso): void
     {
+        if ($this->strict) {
+            return;
+        }
         $iso = strtolower($iso);
         if (!$this->showFlags) {
             $this->judge($iso === $this->current()->code);
