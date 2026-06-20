@@ -70,6 +70,7 @@ class FlagQuizApp extends App
             window.fqLayers = {};     // iso2 -> Leaflet layer
             window.fqNames = {};      // iso2 -> country name (from the GeoJSON)
             window.fqState = { target: null, greens: [], reds: [], labels: false, autoZoom: true };
+            window.fqZoomedTo = null;  // last target auto-zoomed to; cleared when auto-zoom is off
 
             function fqIso(feature) {
                 var p = feature.properties || {};
@@ -110,8 +111,16 @@ class FlagQuizApp extends App
                     window.fqLayers[iso].setStyle(fqStyleFor(iso));
                 });
                 fqSetLabels(!!s.labels);
-                if (s.autoZoom && s.target && window.fqLayers[s.target]) {
-                    try { window.fqMap.fitBounds(window.fqLayers[s.target].getBounds(), { padding: [50, 50], maxZoom: 6 }); } catch (e) {}
+                // Auto-zoom only when enabled AND the target actually changed, so
+                // toggling auto-zoom off — or any other re-render — never resets the
+                // user's current zoom. Turning it back on re-zooms (memory cleared).
+                if (s.autoZoom) {
+                    if (s.target && s.target !== window.fqZoomedTo && window.fqLayers[s.target]) {
+                        try { window.fqMap.fitBounds(window.fqLayers[s.target].getBounds(), { padding: [50, 50], maxZoom: 6 }); } catch (e) {}
+                        window.fqZoomedTo = s.target;
+                    }
+                } else {
+                    window.fqZoomedTo = null;
                 }
             };
             window.fqGeo = null;  // cached GeoJSON so mode switches don't refetch
@@ -141,6 +150,7 @@ class FlagQuizApp extends App
                 window.fqMap = null;
                 window.fqLayers = {};
                 window.fqNames = {};
+                window.fqZoomedTo = null;
             };
             window.fqInitMap = function (key, url) {
                 var el = document.getElementById(key);
@@ -157,6 +167,7 @@ class FlagQuizApp extends App
                     window.fqMap = null;
                     window.fqLayers = {};
                     window.fqNames = {};
+                    window.fqZoomedTo = null;
                 }
                 var map = L.map(key, { minZoom: 1, worldCopyJump: true, attributionControl: false }).setView([25, 0], 2);
                 window.fqMap = map;
