@@ -43,9 +43,6 @@ use Samples\FlagQuiz\Screens\StartScreen;
  */
 class FlagQuiz extends Component
 {
-    /** Number of segments in the progress bar. */
-    private const PROGRESS_SEGMENTS = 40;
-
     private GamePhase $phase = GamePhase::Start;
 
     /** The mode currently being played (drives routing). */
@@ -67,6 +64,9 @@ class FlagQuiz extends Component
     /** Settings, chosen on the start screen and kept across games. */
     private bool $showFlags = true;
     private bool $strict = true;
+
+    /** How flags are ordered: Random, or grouped so lookalikes sit together. */
+    private FlagSort $flagSort = FlagSort::Random;
 
     /** @var Continent[] continents a game is restricted to (all by default) */
     private array $continents = [];
@@ -103,6 +103,7 @@ class FlagQuiz extends Component
         $this->useState($this->autoZoom);
         $this->useState($this->showFlags);
         $this->useState($this->strict);
+        $this->useState($this->flagSort);
         $this->useState($this->continents);
         $this->useState($this->order);
         $this->useState($this->index);
@@ -142,7 +143,17 @@ class FlagQuiz extends Component
 
         // Restrict the game to the chosen continents.
         $this->order = $this->selectedCountryIndexes();
+        // Always shuffle first; for the grouped orderings a stable sort by the
+        // similarity key (stable since PHP 8.0) then clusters lookalikes while
+        // keeping their within-group order random.
         shuffle($this->order);
+        if ($this->flagSort !== FlagSort::Random) {
+            $all = Country::all();
+            usort(
+                $this->order,
+                fn(int $a, int $b) => $this->flagSort->keyFor($all[$a]) <=> $this->flagSort->keyFor($all[$b]),
+            );
+        }
         $n = count($this->order);
         $this->index = 0;
         $this->status = array_fill(0, $n, Answer::Pending);
@@ -256,6 +267,23 @@ class FlagQuiz extends Component
         $this->strict = !$this->strict;
     }
 
+    private function setFlagSort(FlagSort $sort): void
+    {
+        $this->flagSort = $sort;
+    }
+
+    /**
+     * Switch the selected quiz mode. The order options differ per mode, so if
+     * the current choice isn't offered for the new mode, fall back to Random.
+     */
+    private function setQuizMode(GameMode $mode): void
+    {
+        $this->quizMode = $mode;
+        if (!in_array($this->flagSort, FlagSort::forMode($mode), true)) {
+            $this->flagSort = FlagSort::Random;
+        }
+    }
+
     private function toggleAutoZoom(): void
     {
         $this->autoZoom = !$this->autoZoom;
@@ -365,10 +393,6 @@ class FlagQuiz extends Component
             ->background(Palette::page())
             ->color(Palette::ink())
             ->content(
-                // No quiz progress in explore mode.
-                $isExplore
-                    ? UI::row()->height(Unit::em(0.1875))->width(Unit::full())->noShrink()->background(Palette::blue())
-                    : $this->buildProgress($total, $answered),
                 match (true) {
                     $this->phase === GamePhase::Finished => $this->buildFinished($total),
                     $isExplore => $this->buildExplore(),
@@ -379,36 +403,18 @@ class FlagQuiz extends Component
                         $this->quizMode,
                         $this->showFlags,
                         $this->strict,
+                        $this->flagSort,
                         $this->continents,
                         fn() => $this->startQuiz(),
-                        fn(GameMode $mode) => $this->quizMode = $mode,
+                        fn(GameMode $mode) => $this->setQuizMode($mode),
                         fn() => $this->toggleShowFlags(),
                         fn() => $this->toggleStrict(),
+                        fn(FlagSort $s) => $this->setFlagSort($s),
                         fn(Continent $c) => $this->toggleContinent($c),
                         fn() => $this->startExplore(),
                     ),
                 }
             );
-    }
-
-    private function buildProgress(int $total, int $answered): UIElement
-    {
-        $done = $this->phase === GamePhase::Finished ? $total : $answered;
-        $filled = $total > 0 ? (int)round($done / $total * self::PROGRESS_SEGMENTS) : 0;
-
-        $segments = [];
-        for ($i = 0; $i < self::PROGRESS_SEGMENTS; $i++) {
-            $segments[] = UI::container()
-                ->grow()
-                ->extendY()
-                ->background($i < $filled ? Palette::blue() : Palette::track());
-        }
-
-        return UI::row()
-            ->height(Unit::em(0.1875))
-            ->width(Unit::full())
-            ->noShrink()
-            ->content(...$segments);
     }
 
     private function buildPlay(int $total, int $answered): UIElement
@@ -505,16 +511,12 @@ class FlagQuiz extends Component
             $reds[] = $this->current()->code;
         }
 
+        // Fullscreen: the map fills the viewport edge-to-edge — no card chrome
+        // (margins / border / rounding / shadow) boxing it in.
         return UI::column()
             ->grow()
             ->minHeight(Unit::em(0))
-            ->margin(Unit::px(16))
-            ->margin(Unit::px(32), Pseudo::lg())
             ->background(Palette::white())
-            ->bordered()
-            ->borderColor(Palette::border())
-            ->rounded(Unit::px(18))
-            ->shadow(Shadow::Large)
             ->clipContent()
             ->content(
                 new ScoreBar($answered, $total, $score, $right, $wrong, $time, array_slice($this->history, -5)),
@@ -569,16 +571,12 @@ class FlagQuiz extends Component
     {
         $selected = $this->exploreIso !== '' ? Country::byCode($this->exploreIso) : null;
 
+        // Fullscreen: the map fills the viewport edge-to-edge — no card chrome
+        // (margins / border / rounding / shadow) boxing it in.
         return UI::column()
             ->grow()
             ->minHeight(Unit::em(0))
-            ->margin(Unit::px(16))
-            ->margin(Unit::px(32), Pseudo::lg())
             ->background(Palette::white())
-            ->bordered()
-            ->borderColor(Palette::border())
-            ->rounded(Unit::px(18))
-            ->shadow(Shadow::Large)
             ->clipContent()
             ->content(
                 // Header: title + the focused country's flag & name + Back.

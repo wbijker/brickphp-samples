@@ -130,6 +130,18 @@ class FlagQuizApp extends App
                 }).addTo(map);
                 setTimeout(function () { map.invalidateSize(); window.fqApplyState(null); }, 60);
             }
+            // Tear the map down when its screen unmounts (WorldMap::deleted()).
+            // Without this the Leaflet instance + its DOM/panes can linger on a
+            // detached container and resurface when the map screen is reopened.
+            // fqGeo is kept cached so the next map build doesn't refetch.
+            window.fqDestroyMap = function () {
+                if (window.fqMap) {
+                    try { window.fqMap.remove(); } catch (e) {}
+                }
+                window.fqMap = null;
+                window.fqLayers = {};
+                window.fqNames = {};
+            };
             window.fqInitMap = function (key, url) {
                 var el = document.getElementById(key);
                 if (!el) return;

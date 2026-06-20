@@ -3,6 +3,7 @@
 namespace Samples\FlagQuiz\Screens;
 
 use Closure;
+use BrickPHP\Events\InputEvent;
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
 use BrickPHP\UI\Pseudo;
@@ -14,6 +15,7 @@ use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 use Samples\FlagQuiz\Components\Toggle;
 use Samples\FlagQuiz\Continent;
+use Samples\FlagQuiz\FlagSort;
 use Samples\FlagQuiz\GameMode;
 use Samples\FlagQuiz\Logo;
 use Samples\FlagQuiz\Palette;
@@ -33,6 +35,7 @@ class StartScreen extends Component
      * @param Closure $onSelectMode       fn(GameMode $mode): void
      * @param Closure $onToggleShowFlags  fn(): void
      * @param Closure $onToggleStrict     fn(): void
+     * @param Closure $onSelectSort       fn(FlagSort $sort): void
      * @param Closure $onToggleContinent  fn(Continent $continent): void
      * @param Closure $onExplore          fn(): void — launch Explore directly
      */
@@ -41,11 +44,13 @@ class StartScreen extends Component
         private GameMode $quizMode,
         private bool $showFlags,
         private bool $strict,
+        private FlagSort $flagSort,
         private array $continents,
         private Closure $onStart,
         private Closure $onSelectMode,
         private Closure $onToggleShowFlags,
         private Closure $onToggleStrict,
+        private Closure $onSelectSort,
         private Closure $onToggleContinent,
         private Closure $onExplore,
     ) {}
@@ -97,7 +102,7 @@ class StartScreen extends Component
                     ->padding(Unit::px(16))
                     ->padding(Unit::px(20), Pseudo::sm())
                     ->content(
-                        UI::button('Start quiz')
+                        UI::button('Start Quiz')
                             ->width(Unit::full())
                             ->background(Palette::ink())
                             ->color(Palette::white())
@@ -274,6 +279,49 @@ class StartScreen extends Component
                     $this->strict,
                     $this->onToggleStrict,
                 ),
+                UI::container()->extendX()->height(Unit::em(0.0625))->background(Palette::border()),
+                $this->flagOrderSetting(),
+            );
+    }
+
+    /**
+     * The flag-order dropdown: orders the deck so visually similar flags sit next
+     * to each other (by colour, by shape, or both) instead of being shuffled.
+     */
+    private function flagOrderSetting(): UIElement
+    {
+        $options = [];
+        foreach (FlagSort::forMode($this->quizMode) as $sort) {
+            $options[] = UI::option($sort->label(), $sort->value)->selected($sort === $this->flagSort);
+        }
+
+        return UI::row()
+            ->alignMiddle()
+            ->alignBetween()
+            ->gap(Unit::px(16))
+            ->padding(x: Unit::px(20), y: Unit::px(16))
+            ->content(
+                UI::column()
+                    ->grow()
+                    ->gap(Unit::px(2))
+                    ->content(
+                        UI::text('Flag order')->weight(FontWeight::SemiBold)->fontSize(FontSize::Small),
+                        UI::text('Group similar-looking flags together')
+                            ->fontSize(FontSize::ExtraSmall)->color(Palette::subtle()),
+                    ),
+                UI::select()
+                    ->noShrink()
+                    ->background(Palette::white())
+                    ->color(Palette::ink())
+                    ->bordered()
+                    ->borderColor(Palette::border())
+                    ->rounded(Unit::px(10))
+                    ->padding(x: Unit::px(12), y: Unit::px(8))
+                    ->fontSize(FontSize::Small)
+                    ->weight(FontWeight::Medium)
+                    ->clickable()
+                    ->onChange(fn(InputEvent $e) => ($this->onSelectSort)(FlagSort::from($e->value ?? 'random')))
+                    ->options(...$options),
             );
     }
 }

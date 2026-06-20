@@ -7,7 +7,7 @@ use BrickPHP\Js\Js;
 use BrickPHP\UI\Color;
 use BrickPHP\UI\UI;
 use BrickPHP\UI\Unit;
-use BrickPHP\VNode\StatelessComponent;
+use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 
 /**
@@ -19,7 +19,7 @@ use BrickPHP\VNode\VNode;
  * the ones already correct (green) and wrong (red) — so the map recolours and
  * zooms to the target. Clicking a country dispatches its ISO-2 code as a guess.
  */
-class WorldMap extends StatelessComponent
+class WorldMap extends Component
 {
     /**
      * Medium-detail Natural Earth countries (ISO_A2 in properties), served with
@@ -50,6 +50,14 @@ class WorldMap extends StatelessComponent
     protected function created(): void
     {
         Js::run(Js::invoke(Js::obj('window', 'fqInitMap'), Js::str(self::MAP_ID), Js::str(self::GEOJSON_URL)));
+    }
+
+    protected function deleted(): void
+    {
+        // The map screen unmounted (back to start / mode switch): tear the
+        // Leaflet instance down so reopening builds a fresh one rather than
+        // resurrecting a now-detached container.
+        Js::run(Js::invoke(Js::obj('window', 'fqDestroyMap')));
     }
 
     protected function build(): VNode
