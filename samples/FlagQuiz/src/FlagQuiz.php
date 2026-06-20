@@ -14,6 +14,8 @@ use BrickPHP\UI\Unit;
 use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 use Samples\FlagQuiz\Components\BrandInfo;
+use Samples\FlagQuiz\Components\ChipToggle;
+use Samples\FlagQuiz\Components\CountryList;
 use Samples\FlagQuiz\Components\FlagGrid;
 use Samples\FlagQuiz\Components\GuessInput;
 use Samples\FlagQuiz\Components\GuessPanel;
@@ -26,7 +28,9 @@ use Samples\FlagQuiz\Screens\StartScreen;
  * Flagdle — the game's stateful core. Holds the session state and the rules,
  * and composes the screens/components ({@see StartScreen}, {@see ScoreBar},
  * {@see GuessPanel}, {@see FlagGrid}, {@see FinishedScreen}) that render it.
- * Country data lives in {@see Country}, colours in {@see Palette}.
+ * Country data lives in {@see Country}, colours in {@see Palette}. The phase,
+ * mode and per-question outcomes are typed enums ({@see GamePhase},
+ * {@see GameMode}, {@see Answer}) rather than magic strings.
  *
  * Layout is responsive: one block that stacks vertically on narrow screens and
  * splits left/right from the `lg` breakpoint up. The page scrolls on small
@@ -42,10 +46,16 @@ class FlagQuiz extends Component
     /** Number of segments in the progress bar. */
     private const PROGRESS_SEGMENTS = 40;
 
-    private string $phase = 'start';
+    private GamePhase $phase = GamePhase::Start;
 
-    /** Chosen game mode: 'flags' (name the flag) | 'location' (find it on the map). */
-    private string $mode = 'flags';
+    /** Chosen game mode. */
+    private GameMode $mode = GameMode::Flags;
+
+    /** Explore mode: ISO-2 of the country currently focused on the map. */
+    private string $exploreIso = '';
+
+    /** Map modes: auto-zoom to the highlighted / selected country. */
+    private bool $autoZoom = true;
 
     /** Settings, chosen on the start screen and kept across games. */
     private bool $showFlags = true;
@@ -54,15 +64,15 @@ class FlagQuiz extends Component
     /** @var int[] shuffled indices into Country::all() */
     private array $order = [];
     private int $index = 0;
-    /** @var string[] one entry per order position: '' | 'correct' | 'skipped' | 'wrong' */
+    /** @var Answer[] one entry per order position (Pending until decided) */
     private array $status = [];
     private bool $wrong = false;
     /**
-     * One entry per *decided* flag, in order: 'correct' | 'wrong'. Only a
-     * correct answer or a strict-mode wrong answer (where we move on) records
-     * an entry — a retryable wrong guess does not.
+     * One entry per *decided* flag, in order. Only a correct answer or a
+     * strict-mode wrong answer (where we move on) records an entry — a
+     * retryable wrong guess does not. Holds only Answer::Correct / Answer::Wrong.
      *
-     * @var string[]
+     * @var Answer[]
      */
     private array $history = [];
     private int $startTime = 0;
@@ -72,6 +82,8 @@ class FlagQuiz extends Component
     {
         $this->useState($this->phase);
         $this->useState($this->mode);
+        $this->useState($this->exploreIso);
+        $this->useState($this->autoZoom);
         $this->useState($this->showFlags);
         $this->useState($this->strict);
         $this->useState($this->order);
@@ -89,16 +101,23 @@ class FlagQuiz extends Component
 
     private function startGame(): void
     {
+        if ($this->mode === GameMode::Explore) {
+            // Free exploration — no quiz state.
+            $this->exploreIso = '';
+            $this->phase = GamePhase::Playing;
+            return;
+        }
+
         $n = count(Country::all());
         $this->order = range(0, $n - 1);
         shuffle($this->order);
         $this->index = 0;
-        $this->status = array_fill(0, $n, '');
+        $this->status = array_fill(0, $n, Answer::Pending);
         $this->wrong = false;
         $this->history = [];
         $this->elapsed = 0;
         $this->startTime = time();
-        $this->phase = 'playing';
+        $this->phase = GamePhase::Playing;
     }
 
     /**
@@ -111,10 +130,43 @@ class FlagQuiz extends Component
         $this->judge($this->current()->matches($value));
     }
 
-    /** A clicked country (Locations mode) — its ISO-2 code is the guess. */
+    /**
+     * A clicked country in Locations mode. When "free navigation" is on you
+     * can move between countries — clicking an unanswered one selects it as the
+     * target. When off, you can't move, so a click is a guess of the current
+     * target instead.
+     */
     private function handlePick(string $iso): void
     {
-        $this->judge(strtolower($iso) === $this->current()->code);
+        $iso = strtolower($iso);
+        if (!$this->showFlags) {
+            $this->judge($iso === $this->current()->code);
+            return;
+        }
+        $pos = $this->posForIso($iso);
+        if ($pos !== null && ($this->status[$pos] ?? Answer::Pending) === Answer::Pending) {
+            $this->index = $pos;
+            $this->wrong = false;
+            Js::run("var i=document.getElementById('fq-input'); if (i) { i.focus(); }");
+        }
+    }
+
+    /** Explore mode: focus the map on the clicked / chosen country. */
+    private function exploreSelect(string $iso): void
+    {
+        $this->exploreIso = strtolower($iso);
+    }
+
+    /** Order position of the country with this ISO-2 code, or null. */
+    private function posForIso(string $iso): ?int
+    {
+        $all = Country::all();
+        foreach ($this->order as $pos => $countryIdx) {
+            if ($all[$countryIdx]->code === $iso) {
+                return $pos;
+            }
+        }
+        return null;
     }
 
     /**
@@ -125,14 +177,14 @@ class FlagQuiz extends Component
     private function judge(bool $correct): void
     {
         if ($correct) {
-            $this->status[$this->index] = 'correct';
+            $this->status[$this->index] = Answer::Correct;
             $this->wrong = false;
-            $this->history[] = 'correct';
+            $this->history[] = Answer::Correct;
             $this->advance();
         } elseif ($this->strict) {
-            $this->status[$this->index] = 'wrong';
+            $this->status[$this->index] = Answer::Wrong;
             $this->wrong = false;
-            $this->history[] = 'wrong';
+            $this->history[] = Answer::Wrong;
             $this->advance();
         } else {
             $this->wrong = true;
@@ -141,7 +193,7 @@ class FlagQuiz extends Component
 
     private function skip(): void
     {
-        $this->status[$this->index] = 'skipped';
+        $this->status[$this->index] = Answer::Skipped;
         $this->wrong = false;
         $this->advance();
     }
@@ -158,7 +210,7 @@ class FlagQuiz extends Component
     {
         $this->elapsed = time() - $this->startTime;
         $this->wrong = false;
-        $this->phase = 'finished';
+        $this->phase = GamePhase::Finished;
     }
 
     private function toggleShowFlags(): void
@@ -171,24 +223,29 @@ class FlagQuiz extends Component
         $this->strict = !$this->strict;
     }
 
+    private function toggleAutoZoom(): void
+    {
+        $this->autoZoom = !$this->autoZoom;
+    }
+
     private function advance(): void
     {
         $n = count($this->order);
         for ($k = 1; $k <= $n; $k++) {
             $j = ($this->index + $k) % $n;
-            if (($this->status[$j] ?? '') === '') {
+            if (($this->status[$j] ?? Answer::Pending) === Answer::Pending) {
                 $this->index = $j;
                 return;
             }
         }
         $this->elapsed = time() - $this->startTime;
         $this->wrong = false;
-        $this->phase = 'finished';
+        $this->phase = GamePhase::Finished;
     }
 
     private function jumpTo(int $pos): void
     {
-        if (($this->status[$pos] ?? '') !== '') {
+        if (($this->status[$pos] ?? Answer::Pending) !== Answer::Pending) {
             return;
         }
         $this->index = $pos;
@@ -208,6 +265,24 @@ class FlagQuiz extends Component
         return intdiv($seconds, 60) . ':' . str_pad((string)($seconds % 60), 2, '0', STR_PAD_LEFT);
     }
 
+    /** How many order positions have been decided (not still pending). */
+    private function answeredCount(): int
+    {
+        return count(array_filter($this->status, fn(Answer $a) => $a->isDecided()));
+    }
+
+    /** How many order positions carry a given outcome. */
+    private function countStatus(Answer $answer): int
+    {
+        return count(array_filter($this->status, fn(Answer $a) => $a === $answer));
+    }
+
+    /** How many history entries carry a given outcome. */
+    private function countHistory(Answer $answer): int
+    {
+        return count(array_filter($this->history, fn(Answer $a) => $a === $answer));
+    }
+
     // ============================================================
     // Render
     // ============================================================
@@ -215,7 +290,8 @@ class FlagQuiz extends Component
     protected function build(): VNode
     {
         $total = count(Country::all());
-        $answered = count(array_filter($this->status, fn(string $s) => $s !== ''));
+        $answered = $this->answeredCount();
+        $isExplore = $this->phase === GamePhase::Playing && $this->mode === GameMode::Explore;
 
         return UI::column()
             ->minHeight(Unit::vh(100))
@@ -225,19 +301,22 @@ class FlagQuiz extends Component
             ->background(Palette::page())
             ->color(Palette::ink())
             ->content(
-                $this->buildProgress($total, $answered),
-                match ($this->phase) {
-                    'playing' => $this->mode === 'location'
-                        ? $this->buildPlayLocation($total, $answered)
-                        : $this->buildPlay($total, $answered),
-                    'finished' => $this->buildFinished($total),
+                // No quiz progress in explore mode.
+                $isExplore
+                    ? UI::row()->height(Unit::px(3))->width(Unit::full())->noShrink()->background(Palette::blue())
+                    : $this->buildProgress($total, $answered),
+                match (true) {
+                    $this->phase === GamePhase::Finished => $this->buildFinished($total),
+                    $isExplore => $this->buildExplore(),
+                    $this->phase === GamePhase::Playing && $this->mode === GameMode::Location => $this->buildPlayLocation($total, $answered),
+                    $this->phase === GamePhase::Playing => $this->buildPlay($total, $answered),
                     default => new StartScreen(
                         $total,
                         $this->mode,
                         $this->showFlags,
                         $this->strict,
                         fn() => $this->startGame(),
-                        fn(string $mode) => $this->mode = $mode,
+                        fn(GameMode $mode) => $this->mode = $mode,
                         fn() => $this->toggleShowFlags(),
                         fn() => $this->toggleStrict(),
                     ),
@@ -247,7 +326,7 @@ class FlagQuiz extends Component
 
     private function buildProgress(int $total, int $answered): UIElement
     {
-        $done = $this->phase === 'finished' ? $total : $answered;
+        $done = $this->phase === GamePhase::Finished ? $total : $answered;
         $filled = $total > 0 ? (int)round($done / $total * self::PROGRESS_SEGMENTS) : 0;
 
         $segments = [];
@@ -267,12 +346,11 @@ class FlagQuiz extends Component
 
     private function buildPlay(int $total, int $answered): UIElement
     {
-        $correct = count(array_filter($this->status, fn(string $s) => $s === 'correct'));
-        $score = $answered > 0 ? (int)round($correct / $answered * 100) : 0;
+        $score = $answered > 0 ? (int)round($this->countStatus(Answer::Correct) / $answered * 100) : 0;
         $time = $this->fmtTime(time() - $this->startTime);
 
-        $right = count(array_filter($this->history, fn(string $r) => $r === 'correct'));
-        $wrong = count($this->history) - $right;
+        $right = $this->countHistory(Answer::Correct);
+        $wrong = $this->countHistory(Answer::Wrong);
 
         $remaining = $this->remainingItems();
         $showGrid = $this->showFlags && count($remaining) > 0;
@@ -309,7 +387,7 @@ class FlagQuiz extends Component
                 fn() => $this->skip(),
                 fn() => $this->next(),
             ),
-            new BrandInfo(fn() => $this->phase = 'start', fn() => $this->finish()),
+            new BrandInfo(fn() => $this->phase = GamePhase::Start, fn() => $this->finish()),
         ];
 
         // Built as one fluent chain per branch so the CssExtractor harvests the
@@ -339,20 +417,19 @@ class FlagQuiz extends Component
     /** Locations mode: scorebar, the world map (target highlighted), the input. */
     private function buildPlayLocation(int $total, int $answered): UIElement
     {
-        $correct = count(array_filter($this->status, fn(string $s) => $s === 'correct'));
-        $score = $answered > 0 ? (int)round($correct / $answered * 100) : 0;
+        $score = $answered > 0 ? (int)round($this->countStatus(Answer::Correct) / $answered * 100) : 0;
         $time = $this->fmtTime(time() - $this->startTime);
-        $right = count(array_filter($this->history, fn(string $r) => $r === 'correct'));
-        $wrong = count($this->history) - $right;
+        $right = $this->countHistory(Answer::Correct);
+        $wrong = $this->countHistory(Answer::Wrong);
 
         $all = Country::all();
         $greens = [];
         $reds = [];
         foreach ($this->order as $pos => $countryIdx) {
-            $status = $this->status[$pos] ?? '';
-            if ($status === 'correct') {
+            $status = $this->status[$pos] ?? Answer::Pending;
+            if ($status === Answer::Correct) {
                 $greens[] = $all[$countryIdx]->code;
-            } elseif ($status === 'wrong') {
+            } elseif ($status === Answer::Wrong) {
                 $reds[] = $all[$countryIdx]->code;
             }
         }
@@ -374,18 +451,28 @@ class FlagQuiz extends Component
             ->clipContent()
             ->content(
                 new ScoreBar($answered, $total, $score, $right, $wrong, $time, array_slice($this->history, -5)),
+                // Prompt + auto-zoom control. Wraps so the chip drops below the
+                // prompt on narrow screens instead of crowding it.
                 UI::row()
                     ->noShrink()
+                    ->wrap()
                     ->alignMiddle()
-                    ->gap(Unit::px(8))
+                    ->alignBetween()
+                    ->gap(Unit::px(10))
                     ->bordered(bottom: 1)
                     ->borderColor(Palette::border())
-                    ->padding(x: Unit::px(24), y: Unit::px(12))
+                    ->padding(x: Unit::px(16), y: Unit::px(12))
+                    ->padding(x: Unit::px(24), pseudo: Pseudo::lg())
                     ->content(
-                        UI::text('Which country is highlighted?')
-                            ->fontSize(FontSize::Small)->weight(FontWeight::SemiBold),
-                        UI::text('· tap it on the map or type its name')
-                            ->fontSize(FontSize::Small)->color(Palette::subtle()),
+                        UI::row()->wrap()->alignMiddle()->gap(Unit::px(8))->content(
+                            UI::text('Which country is highlighted?')
+                                ->fontSize(FontSize::Small)->weight(FontWeight::SemiBold),
+                            UI::text($this->showFlags
+                                ? '· type its name · tap any country to jump there'
+                                : '· tap it on the map or type its name')
+                                ->fontSize(FontSize::Small)->color(Palette::subtle()),
+                        ),
+                        new ChipToggle('Auto-zoom', $this->autoZoom, fn() => $this->toggleAutoZoom()),
                     ),
                 UI::column()
                     ->grow()
@@ -396,6 +483,7 @@ class FlagQuiz extends Component
                             $greens,
                             $reds,
                             fn(string $iso) => $this->handlePick($iso),
+                            autoZoom: $this->autoZoom,
                         ),
                     ),
                 new GuessInput(
@@ -405,18 +493,99 @@ class FlagQuiz extends Component
                     fn() => $this->skip(),
                     fn() => $this->next(),
                 ),
-                new BrandInfo(fn() => $this->phase = 'start', fn() => $this->finish()),
+                new BrandInfo(fn() => $this->phase = GamePhase::Start, fn() => $this->finish()),
             );
     }
 
-    /** @return array<array{pos:int, country:Country}> all unanswered (incl. current) */
+    /** Explore mode: a country list on the left, the world map on the right. */
+    private function buildExplore(): UIElement
+    {
+        $selected = $this->exploreIso !== '' ? Country::byCode($this->exploreIso) : null;
+
+        return UI::column()
+            ->grow()
+            ->minHeight(Unit::px(0))
+            ->margin(Unit::px(16))
+            ->margin(Unit::px(32), Pseudo::lg())
+            ->background(Palette::white())
+            ->bordered()
+            ->borderColor(Palette::border())
+            ->rounded(Unit::px(18))
+            ->shadow(Shadow::Large)
+            ->clipContent()
+            ->content(
+                // Header: title + the focused country's flag & name + Back.
+                // Wraps so the controls fall below the title on small screens.
+                UI::row()
+                    ->noShrink()
+                    ->wrap()
+                    ->alignMiddle()
+                    ->alignBetween()
+                    ->gap(Unit::px(12))
+                    ->bordered(bottom: 1)
+                    ->borderColor(Palette::border())
+                    ->padding(x: Unit::px(16), y: Unit::px(12))
+                    ->padding(x: Unit::px(20), pseudo: Pseudo::lg())
+                    ->content(
+                        $selected !== null
+                            ? UI::row()->alignMiddle()->gap(Unit::px(11))->content(
+                                UI::image($selected->thumbUrl(), '')
+                                    ->width(Unit::px(40))->height(Unit::px(27))->objectContain()
+                                    ->rounded(Unit::px(4))->bordered()->borderColor(Palette::border()),
+                                UI::text($selected->name)->weight(FontWeight::SemiBold)->fontSize(FontSize::Large),
+                            )
+                            : UI::text('Explore the world — pick a country to focus the map')
+                                ->fontSize(FontSize::Small)->color(Palette::subtle()),
+                        UI::row()->noShrink()->alignMiddle()->gap(Unit::px(20))->content(
+                            new ChipToggle('Auto-zoom', $this->autoZoom, fn() => $this->toggleAutoZoom()),
+                            UI::button('Back to start')
+                                ->noShrink()
+                                ->borderNone()
+                                ->background(Palette::transparent())
+                                ->color(Palette::blue())
+                                ->weight(FontWeight::SemiBold)
+                                ->fontSize(FontSize::Small)
+                                ->padding(Unit::none())
+                                ->clickable()
+                                ->onClick(fn() => $this->phase = GamePhase::Start),
+                        ),
+                    ),
+                // Body: list (left) + map (right); stacks on small screens.
+                UI::column()
+                    ->grow()
+                    ->minHeight(Unit::px(0))
+                    ->direction(Direction::row(), Pseudo::lg())
+                    ->content(
+                        new CountryList(
+                            Country::all(),
+                            $this->exploreIso,
+                            fn(string $iso) => $this->exploreSelect($iso),
+                        ),
+                        UI::column()
+                            ->grow()
+                            ->minHeight(Unit::px(0))
+                            ->content(
+                                new WorldMap(
+                                    $this->exploreIso,
+                                    [],
+                                    [],
+                                    fn(string $iso) => $this->exploreSelect($iso),
+                                    labels: true,
+                                    autoZoom: $this->autoZoom,
+                                ),
+                            ),
+                    ),
+            );
+    }
+
+    /** @return RemainingFlag[] all unanswered questions (incl. the current one) */
     private function remainingItems(): array
     {
         $all = Country::all();
         $out = [];
         foreach ($this->order as $pos => $countryIdx) {
-            if (($this->status[$pos] ?? '') === '') {
-                $out[] = ['pos' => $pos, 'country' => $all[$countryIdx]];
+            if (($this->status[$pos] ?? Answer::Pending) === Answer::Pending) {
+                $out[] = new RemainingFlag($pos, $all[$countryIdx]);
             }
         }
         return $out;
@@ -425,18 +594,18 @@ class FlagQuiz extends Component
     private function buildFinished(int $total): VNode
     {
         $all = Country::all();
-        $correct = count(array_filter($this->status, fn(string $s) => $s === 'correct'));
-        $answered = count(array_filter($this->status, fn(string $s) => $s !== ''));
+        $correct = $this->countStatus(Answer::Correct);
+        $answered = $this->answeredCount();
         // Accuracy over what was actually attempted (so an early "Done" isn't
         // diluted by flags never reached).
         $accuracy = $answered > 0 ? (int)round($correct / $answered * 100) : 0;
 
         // The flags actually got wrong or gave up on — not the ones never
-        // reached (status '' when finishing early).
+        // reached (still pending when finishing early).
         $missed = [];
         foreach ($this->order as $pos => $countryIdx) {
-            $status = $this->status[$pos] ?? '';
-            if ($status === 'wrong' || $status === 'skipped') {
+            $status = $this->status[$pos] ?? Answer::Pending;
+            if ($status === Answer::Wrong || $status === Answer::Skipped) {
                 $missed[] = $all[$countryIdx];
             }
         }
@@ -448,7 +617,7 @@ class FlagQuiz extends Component
             $this->fmtTime($this->elapsed),
             $missed,
             fn() => $this->startGame(),
-            fn() => $this->phase = 'start',
+            fn() => $this->phase = GamePhase::Start,
         );
     }
 }

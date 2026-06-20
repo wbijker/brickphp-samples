@@ -5,6 +5,7 @@ namespace Samples\FlagQuiz\Components;
 use Closure;
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
+use BrickPHP\UI\Pseudo;
 use BrickPHP\UI\UI;
 use BrickPHP\UI\UIElement;
 use BrickPHP\UI\Unit;
@@ -71,8 +72,10 @@ class GuessInput extends Component
             ->autofocus()
             ->bind($this->input)
             ->width(Unit::full())
-            ->padding(x: Unit::px(30), y: Unit::px(26))
-            ->fontSize(FontSize::ThreeXL)
+            ->padding(x: Unit::px(20), y: Unit::px(18))
+            ->padding(x: Unit::px(30), y: Unit::px(26), pseudo: Pseudo::sm())
+            ->fontSize(FontSize::TwoXL)
+            ->fontSize(FontSize::ThreeXL, Pseudo::sm())
             ->background($this->wrong ? Palette::redWash() : Palette::white())
             ->bordered(top: 1)
             ->borderColor($this->wrong ? Palette::red() : Palette::border())

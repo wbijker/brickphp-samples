@@ -36,6 +36,7 @@
         "samples/site-app": "*",
         "samples/todo-app": "*",
         "samples/docs": "*",
+        "samples/flag-quiz": "*",
         "ext-json": "*",
         "ext-zlib": "*"
     },

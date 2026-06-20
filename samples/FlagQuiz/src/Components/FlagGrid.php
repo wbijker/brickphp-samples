@@ -13,6 +13,7 @@ use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 use Samples\FlagQuiz\Country;
 use Samples\FlagQuiz\Palette;
+use Samples\FlagQuiz\RemainingFlag;
 
 /**
  * The "not yet answered" panel: a wrapping grid of every remaining flag,
@@ -23,7 +24,7 @@ use Samples\FlagQuiz\Palette;
 class FlagGrid extends Component
 {
     /**
-     * @param array<array{pos:int, country:Country}> $items
+     * @param RemainingFlag[] $items
      * @param Closure $onJump fn(int $pos): void
      */
     public function __construct(
@@ -36,15 +37,16 @@ class FlagGrid extends Component
     {
         $cells = [];
         foreach ($this->items as $item) {
-            $cells[] = $item['pos'] === $this->selected
-                ? $this->selectedCell($item['pos'], $item['country'])
-                : $this->cell($item['pos'], $item['country']);
+            $cells[] = $item->pos === $this->selected
+                ? $this->selectedCell($item->pos, $item->country)
+                : $this->cell($item->pos, $item->country);
         }
 
         return UI::column()
             ->grow()
             ->minHeight(Unit::px(0))
-            ->padding(top: Unit::px(24), bottom: Unit::px(28), x: Unit::px(32))
+            ->padding(top: Unit::px(20), bottom: Unit::px(24), x: Unit::px(16))
+            ->padding(top: Unit::px(24), bottom: Unit::px(28), x: Unit::px(32), pseudo: Pseudo::lg())
             ->gap(Unit::px(14))
             ->content(
                 UI::row()

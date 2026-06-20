@@ -5,6 +5,7 @@ namespace Samples\FlagQuiz\Screens;
 use Closure;
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
+use BrickPHP\UI\Pseudo;
 use BrickPHP\UI\Shadow;
 use BrickPHP\UI\UI;
 use BrickPHP\UI\UIElement;
@@ -12,23 +13,26 @@ use BrickPHP\UI\Unit;
 use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 use Samples\FlagQuiz\Components\Toggle;
+use Samples\FlagQuiz\GameMode;
 use Samples\FlagQuiz\Logo;
 use Samples\FlagQuiz\Palette;
 
 /**
  * The landing screen: logo, title, the game-mode chooser and settings (in a
- * scrolling middle), with the Start button pinned to the bottom.
+ * scrolling middle), with the Start button pinned to the bottom. The mode cards
+ * are driven straight off {@see GameMode}, which carries each mode's own copy.
  */
 class StartScreen extends Component
 {
-    private const MODES = [
-        ['flags', 'Flags', 'Name all the flags, one at a time, against the clock.'],
-        ['location', 'Locations', 'Find each highlighted country on the world map.'],
-    ];
-
+    /**
+     * @param Closure $onStart           fn(): void
+     * @param Closure $onSelectMode      fn(GameMode $mode): void
+     * @param Closure $onToggleShowFlags fn(): void
+     * @param Closure $onToggleStrict    fn(): void
+     */
     public function __construct(
         private int $count,
-        private string $mode,
+        private GameMode $mode,
         private bool $showFlags,
         private bool $strict,
         private Closure $onStart,
@@ -43,14 +47,15 @@ class StartScreen extends Component
             ->grow()
             ->minHeight(Unit::px(0))
             ->content(
-                // Scrolling content.
+                // Scrolling content. Roomier padding from the sm breakpoint up.
                 UI::column()
                     ->grow()
                     ->minHeight(Unit::px(0))
                     ->scrollableY()
                     ->alignCenter()
                     ->alignMiddle()
-                    ->padding(Unit::px(40))
+                    ->padding(Unit::px(24))
+                    ->padding(Unit::px(40), Pseudo::sm())
                     ->content(
                         UI::column()
                             ->width(Unit::full())
@@ -64,12 +69,13 @@ class StartScreen extends Component
                                     ->content(
                                         new Logo(true),
                                         UI::text('Flagdle')
-                                            ->fontSize(FontSize::FiveXL)->weight(FontWeight::SemiBold)->center(),
+                                            ->fontSize(FontSize::FourXL)->fontSize(FontSize::FiveXL, Pseudo::sm())
+                                            ->weight(FontWeight::SemiBold)->center(),
                                         UI::text('Learn the flags and countries of the world.')
                                             ->center()->fontSize(FontSize::Base)->color(Palette::subtle()),
                                     ),
                                 $this->modeChooser(),
-                                $this->settings(),
+                                ...($this->mode->hasSettings() ? [$this->settings()] : []),
                             )
                     ),
                 // Pinned bottom bar.
@@ -78,7 +84,8 @@ class StartScreen extends Component
                     ->bordered(top: 1)
                     ->borderColor(Palette::border())
                     ->background(Palette::white())
-                    ->padding(Unit::px(20))
+                    ->padding(Unit::px(16))
+                    ->padding(Unit::px(20), Pseudo::sm())
                     ->content(
                         UI::button('Start quiz')
                             ->width(Unit::full())
@@ -99,10 +106,10 @@ class StartScreen extends Component
     private function modeChooser(): UIElement
     {
         $cards = [];
-        foreach (self::MODES as [$key, $title, $desc]) {
-            $cards[] = $key === $this->mode
-                ? $this->modeCardSelected($title, $desc)
-                : $this->modeCard($key, $title, $desc);
+        foreach (GameMode::cases() as $mode) {
+            $cards[] = $mode === $this->mode
+                ? $this->modeCardSelected($mode)
+                : $this->modeCard($mode);
         }
 
         return UI::column()
@@ -115,7 +122,7 @@ class StartScreen extends Component
             );
     }
 
-    private function modeCard(string $key, string $title, string $desc): UIElement
+    private function modeCard(GameMode $mode): UIElement
     {
         return UI::column()
             ->grow()
@@ -127,14 +134,14 @@ class StartScreen extends Component
             ->rounded(Unit::px(12))
             ->padding(Unit::px(16))
             ->clickable()
-            ->onClick(fn() => ($this->onSelectMode)($key))
+            ->onClick(fn() => ($this->onSelectMode)($mode))
             ->content(
-                UI::text($title)->weight(FontWeight::SemiBold)->fontSize(FontSize::Base),
-                UI::text($desc)->fontSize(FontSize::ExtraSmall)->color(Palette::subtle()),
+                UI::text($mode->title())->weight(FontWeight::SemiBold)->fontSize(FontSize::Base),
+                UI::text($mode->description())->fontSize(FontSize::ExtraSmall)->color(Palette::subtle()),
             );
     }
 
-    private function modeCardSelected(string $title, string $desc): UIElement
+    private function modeCardSelected(GameMode $mode): UIElement
     {
         return UI::column()
             ->grow()
@@ -146,8 +153,8 @@ class StartScreen extends Component
             ->rounded(Unit::px(12))
             ->padding(Unit::px(16))
             ->content(
-                UI::text($title)->weight(FontWeight::SemiBold)->fontSize(FontSize::Base),
-                UI::text($desc)->fontSize(FontSize::ExtraSmall)->color(Palette::subtle()),
+                UI::text($mode->title())->weight(FontWeight::SemiBold)->fontSize(FontSize::Base),
+                UI::text($mode->description())->fontSize(FontSize::ExtraSmall)->color(Palette::subtle()),
             );
     }
 
@@ -162,8 +169,8 @@ class StartScreen extends Component
             ->clipContent()
             ->content(
                 new Toggle(
-                    'Show available flags',
-                    'Flags mode — list every flag not answered yet',
+                    $this->mode->navToggleLabel(),
+                    $this->mode->navToggleDescription(),
                     $this->showFlags,
                     $this->onToggleShowFlags,
                 ),

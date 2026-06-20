@@ -5,6 +5,7 @@ namespace Samples\FlagQuiz\Screens;
 use Closure;
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
+use BrickPHP\UI\Pseudo;
 use BrickPHP\UI\Shadow;
 use BrickPHP\UI\UI;
 use BrickPHP\UI\UIElement;
@@ -93,8 +94,10 @@ class FinishedScreen extends Component
             ->scrollableY()
             ->alignCenter()
             ->alignMiddle()
-            ->gap(Unit::px(26))
-            ->padding(Unit::px(48))
+            ->gap(Unit::px(20))
+            ->gap(Unit::px(26), Pseudo::sm())
+            ->padding(Unit::px(24))
+            ->padding(Unit::px(48), Pseudo::sm())
             ->content(...$children);
     }
 

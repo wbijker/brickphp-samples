@@ -35,12 +35,16 @@ class WorldMap extends StatelessComponent
      * @param string[] $greens ISO-2 codes answered correctly
      * @param string[] $reds   ISO-2 codes answered wrong
      * @param Closure  $onPick fn(string $iso): void
+     * @param bool     $labels show each country's flag + name on the map (Explore)
+     * @param bool     $autoZoom zoom the map to the target country on each render
      */
     public function __construct(
         private string $targetIso,
         private array $greens,
         private array $reds,
         private Closure $onPick,
+        private bool $labels = false,
+        private bool $autoZoom = true,
     ) {}
 
     protected function created(): void
@@ -51,11 +55,13 @@ class WorldMap extends StatelessComponent
     protected function build(): VNode
     {
         // Push the current colouring + zoom target to the (cached) map.
-        $state = json_encode([
-            'target' => $this->targetIso,
-            'greens' => array_values($this->greens),
-            'reds' => array_values($this->reds),
-        ]);
+        $state = json_encode(new MapState(
+            $this->targetIso,
+            $this->greens,
+            $this->reds,
+            $this->labels,
+            $this->autoZoom,
+        ));
         Js::run(Js::invoke(Js::obj('window', 'fqApplyState'), $state));
 
         return UI::div()

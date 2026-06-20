@@ -4,22 +4,25 @@ namespace Samples\FlagQuiz\Components;
 
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
+use BrickPHP\UI\Pseudo;
 use BrickPHP\UI\UI;
 use BrickPHP\UI\UIElement;
 use BrickPHP\UI\Unit;
 use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 use HeroIcons\HeroIcons;
+use Samples\FlagQuiz\Answer;
 use Samples\FlagQuiz\Palette;
 
 /**
  * The scoring header of the left panel: the last-5 attempts strip on top, then
  * a row of stats — flags answered, accuracy, the running right / wrong counts,
- * and the elapsed time, each with an icon.
+ * and the elapsed time, each with an icon. The values shrink a step on phones
+ * so all five cells fit a narrow row without overflow.
  */
 class ScoreBar extends Component
 {
-    /** @param string[] $recent last 5 attempt results for the history strip */
+    /** @param Answer[] $recent last 5 attempt outcomes for the history strip */
     public function __construct(
         private int $answered,
         private int $total,
@@ -44,16 +47,16 @@ class ScoreBar extends Component
                     ->padding(x: Unit::px(16), y: Unit::px(11))
                     ->content(new AttemptHistory($this->recent)),
                 UI::row()->content(
-                    $this->cell(HeroIcons::Flag('none', 1.5, 'currentColor', ''), $this->answered . ' / ' . $this->total, 'Flags', 'ink'),
-                    $this->cell(HeroIcons::ChartBar('none', 1.5, 'currentColor', ''), $this->score . '%', 'Score', 'ink'),
-                    $this->cell(HeroIcons::Check('none', 2, 'currentColor', ''), (string)$this->right, 'Right', 'right'),
-                    $this->cell(HeroIcons::XMark('none', 2, 'currentColor', ''), (string)$this->wrong, 'Wrong', 'wrong'),
-                    $this->cell(HeroIcons::Clock('none', 1.5, 'currentColor', ''), $this->time, 'Time', 'ink'),
+                    $this->cell(HeroIcons::Flag('none', 1.5, 'currentColor', ''), $this->answered . ' / ' . $this->total, 'Flags', StatTone::Ink),
+                    $this->cell(HeroIcons::ChartBar('none', 1.5, 'currentColor', ''), $this->score . '%', 'Score', StatTone::Ink),
+                    $this->cell(HeroIcons::Check('none', 2, 'currentColor', ''), (string)$this->right, 'Right', StatTone::Right),
+                    $this->cell(HeroIcons::XMark('none', 2, 'currentColor', ''), (string)$this->wrong, 'Wrong', StatTone::Wrong),
+                    $this->cell(HeroIcons::Clock('none', 1.5, 'currentColor', ''), $this->time, 'Time', StatTone::Ink),
                 ),
             );
     }
 
-    private function cell(VNode $icon, string $value, string $label, string $tone): UIElement
+    private function cell(VNode $icon, string $value, string $label, StatTone $tone): UIElement
     {
         $labelRow = UI::row()
             ->alignMiddle()
@@ -64,18 +67,20 @@ class ScoreBar extends Component
                 UI::text($label)->fontSize(FontSize::ExtraSmall)->uppercase(),
             );
 
-        if ($tone === 'ink') {
+        if (!$tone->isTally()) {
             return UI::column()
                 ->grow()
                 ->alignCenter()
                 ->gap(Unit::px(3))
                 ->bordered(right: 1)
                 ->borderColor(Palette::border())
-                ->padding(x: Unit::px(10), y: Unit::px(13))
+                ->padding(x: Unit::px(8), y: Unit::px(13))
+                ->padding(x: Unit::px(10), pseudo: Pseudo::sm())
                 ->content(
                     UI::text($value)
                         ->weight(FontWeight::SemiBold)
-                        ->fontSize(FontSize::Large)
+                        ->fontSize(FontSize::Base)
+                        ->fontSize(FontSize::Large, Pseudo::sm())
                         ->color(Palette::ink())
                         ->invalidateText(),
                     $labelRow,
@@ -91,15 +96,17 @@ class ScoreBar extends Component
             ->gap(Unit::px(3))
             ->bordered(right: 1)
             ->borderColor(Palette::border())
-            ->padding(x: Unit::px(10), y: Unit::px(13))
+            ->padding(x: Unit::px(8), y: Unit::px(13))
+            ->padding(x: Unit::px(10), pseudo: Pseudo::sm())
             ->content(
                 UI::text($value)
                     ->weight(FontWeight::SemiBold)
-                    ->fontSize(FontSize::Large)
-                    ->color($tone === 'right' ? Palette::green() : Palette::red())
+                    ->fontSize(FontSize::Base)
+                    ->fontSize(FontSize::Large, Pseudo::sm())
+                    ->color($tone === StatTone::Right ? Palette::green() : Palette::red())
                     ->class('fq-pop')
-                    ->key($tone . '-val-' . $value),
-                $labelRow->key($tone . '-label'),
+                    ->key($tone->name . '-val-' . $value),
+                $labelRow->key($tone->name . '-label'),
             );
     }
 }

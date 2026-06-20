@@ -3,6 +3,7 @@
 namespace Samples\FlagQuiz\Components;
 
 use Closure;
+use BrickPHP\UI\Pseudo;
 use BrickPHP\UI\Shadow;
 use BrickPHP\UI\UI;
 use BrickPHP\UI\UIElement;
@@ -46,10 +47,12 @@ class GuessPanel extends Component
     {
         return UI::row()
             ->extendX()
-            ->height(Unit::px(288))
+            ->height(Unit::px(210))
+            ->height(Unit::px(288), Pseudo::lg())
             ->alignCenter()
             ->alignMiddle()
-            ->padding(Unit::px(36))
+            ->padding(Unit::px(24))
+            ->padding(Unit::px(36), Pseudo::sm())
             ->content(
                 UI::image($this->current->bigUrl(), $this->current->name)
                     ->maxWidth(Unit::full())

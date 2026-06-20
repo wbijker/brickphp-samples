@@ -64,6 +64,17 @@ final class Country
      *
      * @return Country[]
      */
+    public static function byCode(string $code): ?self
+    {
+        $code = strtolower($code);
+        foreach (self::all() as $country) {
+            if ($country->code === $code) {
+                return $country;
+            }
+        }
+        return null;
+    }
+
     public static function all(): array
     {
         static $cache = null;

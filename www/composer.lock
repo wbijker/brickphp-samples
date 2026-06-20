@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "93c0596caa432805cf446cd094864d97",
+    "content-hash": "13914915d1c49e17b7b437aafeffdf79",
     "packages": [
         {
             "name": "brickphp/brickphp",
@@ -12,7 +12,7 @@
             "dist": {
                 "type": "path",
                 "url": "../brickphp",
-                "reference": "210d54882b1a64595d8eefd0ef769a795c617952"
+                "reference": "51a26dec2a1ba3c57a4aad095d33a5e5259bfa9c"
             },
             "require": {
                 "php": ">=8.1"
@@ -116,6 +116,28 @@
             "autoload": {
                 "psr-4": {
                     "Samples\\Docs\\": "src/"
+                }
+            },
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
+            "name": "samples/flag-quiz",
+            "version": "1.0.0",
+            "dist": {
+                "type": "path",
+                "url": "../samples/FlagQuiz",
+                "reference": "d3fdc284b14c258c66527ca8a7b8c1bf998874e3"
+            },
+            "require": {
+                "brickphp/brickphp": "*",
+                "php": ">=8.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Samples\\FlagQuiz\\": "src/"
                 }
             },
             "transport-options": {
