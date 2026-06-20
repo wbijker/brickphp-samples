@@ -367,7 +367,7 @@ class FlagQuiz extends Component
             ->content(
                 // No quiz progress in explore mode.
                 $isExplore
-                    ? UI::row()->height(Unit::px(3))->width(Unit::full())->noShrink()->background(Palette::blue())
+                    ? UI::row()->height(Unit::em(0.1875))->width(Unit::full())->noShrink()->background(Palette::blue())
                     : $this->buildProgress($total, $answered),
                 match (true) {
                     $this->phase === GamePhase::Finished => $this->buildFinished($total),
@@ -405,7 +405,7 @@ class FlagQuiz extends Component
         }
 
         return UI::row()
-            ->height(Unit::px(3))
+            ->height(Unit::em(0.1875))
             ->width(Unit::full())
             ->noShrink()
             ->content(...$segments);
@@ -427,7 +427,7 @@ class FlagQuiz extends Component
         // block's off-white through.
         return UI::column()
             ->grow()
-            ->minHeight(Unit::px(0))
+            ->minHeight(Unit::em(0))
             ->direction(Direction::row(), Pseudo::lg())
             ->margin(Unit::px(16))
             ->margin(Unit::px(32), Pseudo::lg())
@@ -507,7 +507,7 @@ class FlagQuiz extends Component
 
         return UI::column()
             ->grow()
-            ->minHeight(Unit::px(0))
+            ->minHeight(Unit::em(0))
             ->margin(Unit::px(16))
             ->margin(Unit::px(32), Pseudo::lg())
             ->background(Palette::white())
@@ -543,7 +543,7 @@ class FlagQuiz extends Component
                     ),
                 UI::column()
                     ->grow()
-                    ->minHeight(Unit::px(0))
+                    ->minHeight(Unit::em(0))
                     ->content(
                         new WorldMap(
                             $this->current()->code,
@@ -571,7 +571,7 @@ class FlagQuiz extends Component
 
         return UI::column()
             ->grow()
-            ->minHeight(Unit::px(0))
+            ->minHeight(Unit::em(0))
             ->margin(Unit::px(16))
             ->margin(Unit::px(32), Pseudo::lg())
             ->background(Palette::white())
@@ -620,7 +620,7 @@ class FlagQuiz extends Component
                 // Body: list (left) + map (right); stacks on small screens.
                 UI::column()
                     ->grow()
-                    ->minHeight(Unit::px(0))
+                    ->minHeight(Unit::em(0))
                     ->direction(Direction::row(), Pseudo::lg())
                     ->content(
                         new CountryList(
@@ -633,7 +633,7 @@ class FlagQuiz extends Component
                         ),
                         UI::column()
                             ->grow()
-                            ->minHeight(Unit::px(0))
+                            ->minHeight(Unit::em(0))
                             ->content(
                                 new WorldMap(
                                     $this->exploreIso,

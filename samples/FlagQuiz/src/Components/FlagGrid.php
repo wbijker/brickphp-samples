@@ -44,7 +44,7 @@ class FlagGrid extends Component
 
         return UI::column()
             ->grow()
-            ->minHeight(Unit::px(0))
+            ->minHeight(Unit::em(0))
             ->padding(top: Unit::px(20), bottom: Unit::px(24), x: Unit::px(16))
             ->padding(top: Unit::px(24), bottom: Unit::px(28), x: Unit::px(32), pseudo: Pseudo::lg())
             ->gap(Unit::px(14))
@@ -65,7 +65,7 @@ class FlagGrid extends Component
                 UI::column()
                     ->grow()
                     ->padding(2)
-                    ->minHeight(Unit::px(0))
+                    ->minHeight(Unit::em(0))
                     ->scrollableY()
                     ->content(
                         UI::row()

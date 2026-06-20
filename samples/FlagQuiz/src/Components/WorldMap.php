@@ -66,7 +66,7 @@ class WorldMap extends StatelessComponent
 
         return UI::div()
             ->extend()
-            ->minHeight(Unit::px(280))
+            ->minHeight(Unit::em(17.5))
             ->background(Color::stone(200))
             ->attr('id', self::MAP_ID)
             ->customEvent($this->onPick, new MapPickRegistration());

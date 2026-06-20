@@ -90,7 +90,7 @@ class FinishedScreen extends Component
 
         return UI::column()
             ->grow()
-            ->minHeight(Unit::px(0))
+            ->minHeight(Unit::em(0))
             ->scrollableY()
             ->alignCenter()
             ->alignMiddle()
@@ -150,7 +150,7 @@ class FinishedScreen extends Component
                 UI::row()
                     ->wrap()
                     ->gap(Unit::px(9))
-                    ->maxHeight(Unit::px(230))
+                    ->maxHeight(Unit::em(14.375))
                     ->scrollableY()
                     ->content(...$chips),
             );

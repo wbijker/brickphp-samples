@@ -54,12 +54,12 @@ class StartScreen extends Component
     {
         return UI::column()
             ->grow()
-            ->minHeight(Unit::px(0))
+            ->minHeight(Unit::em(0))
             ->content(
                 // Scrolling content. Roomier padding from the sm breakpoint up.
                 UI::column()
                     ->grow()
-                    ->minHeight(Unit::px(0))
+                    ->minHeight(Unit::em(0))
                     ->scrollableY()
                     ->alignCenter()
                     ->alignMiddle()
@@ -267,7 +267,7 @@ class StartScreen extends Component
                     $this->showFlags,
                     $this->onToggleShowFlags,
                 ),
-                UI::container()->extendX()->height(Unit::px(1))->background(Palette::border()),
+                UI::container()->extendX()->height(Unit::em(0.0625))->background(Palette::border()),
                 new Toggle(
                     'Strict mode',
                     'One guess per question — a wrong answer is final',

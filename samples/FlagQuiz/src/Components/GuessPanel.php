@@ -29,7 +29,7 @@ class GuessPanel extends Component
     {
         return UI::column()
             ->grow()
-            ->minHeight(Unit::px(0))
+            ->minHeight(Unit::em(0))
             ->alignMiddle()
             ->content(
                 $this->buildFlag(),
@@ -47,8 +47,8 @@ class GuessPanel extends Component
     {
         return UI::row()
             ->extendX()
-            ->height(Unit::px(210))
-            ->height(Unit::px(288), Pseudo::lg())
+            ->height(Unit::em(13.125))
+            ->height(Unit::em(18), Pseudo::lg())
             ->alignCenter()
             ->alignMiddle()
             ->padding(Unit::px(24))

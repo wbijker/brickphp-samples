@@ -45,7 +45,7 @@ class AttemptHistory extends Component
         // One chain so every class is harvested; Palette ternaries emit all
         // branches. Empty slots are a hollow outline (white fill, grey border).
         return UI::container()
-            ->size(Unit::px(11))
+            ->size(Unit::em(0.6875))
             ->roundedFull()
             ->animated(160)
             ->bordered()

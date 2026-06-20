@@ -27,7 +27,7 @@ class Logo extends Component
     {
         return UI::row()
             ->width(Unit::px(60))
-            ->height(Unit::px(40))
+            ->height(Unit::em(2.5))
             ->rounded(Unit::px(7))
             ->background(Palette::blue())
             ->shadow(Shadow::Large)
@@ -41,7 +41,7 @@ class Logo extends Component
     {
         return UI::row()
             ->width(Unit::px(24))
-            ->height(Unit::px(16))
+            ->height(Unit::em(1))
             ->rounded(Unit::px(3))
             ->background(Palette::blue())
             ->shadow(Shadow::Small)
