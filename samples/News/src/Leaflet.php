@@ -34,11 +34,45 @@ class Leaflet extends StatelessComponent
      */
     public const EVENT_CLICK = 'leaflet:click';
 
+    /** Dispatched when a GeoJSON feature is clicked; the callback gets its id. */
+    public const EVENT_FEATURE = 'leaflet:feature';
+
     /** Prefix carved off when generating the matching native Leaflet event name. */
     private const EVENT_PREFIX = 'leaflet:';
 
+    /**
+     * The Leaflet library on the unpkg CDN, pinned. This is the single home for
+     * the Leaflet asset URLs — any app that needs Leaflet (this wrapper, or the
+     * raw-`L` world map in {@see \Samples\FlagQuiz\FlagQuizApp}) pulls them in
+     * via {@see registerAssets()} rather than hard-coding the links itself.
+     */
+    private const VERSION = '1.9.4';
+    private const CSS_URL = 'https://unpkg.com/leaflet@' . self::VERSION . '/dist/leaflet.css';
+    private const JS_URL = 'https://unpkg.com/leaflet@' . self::VERSION . '/dist/leaflet.js';
+
     /** @var (callable(LeafletMouseEvent): void)|null Click handler set via onClick() */
     private $onClick = null;
+
+    /** @var (callable(string): void)|null Feature-click handler set via onFeatureClick() (gets the id) */
+    private $onFeatureClick = null;
+
+    /** Tile layer URL — OpenStreetMap by default; override with tile(). */
+    private string $tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+    /** @var array<string,mixed> Options for the tile layer. */
+    private array $tileOptions = [
+        'maxZoom' => 19,
+        'attribution' => '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    ];
+
+    /** @var array<string,mixed> Options object passed to `L.map(key, …)`. */
+    private array $mapOptions = [];
+
+    /** @var (callable(mixed): mixed)|null Customises the container div (size, colours…). */
+    private $containerStyler = null;
+
+    /** @var array{url:string,opts:array<string,mixed>}|null GeoJSON overlay, built once in created(). */
+    private ?array $geoJson = null;
 
     /**
      * Decorative `addMarker` / `addCircle` / `addPolygon` / `addPopup`
@@ -80,6 +114,135 @@ class Leaflet extends StatelessComponent
     {
         $this->onClick = $callback;
         return $this;
+    }
+
+    /**
+     * Handle a GeoJSON feature click server-side. The callback receives the
+     * clicked feature's id (as extracted by `addGeoJson`'s `idProps`). Enables
+     * the per-feature click wiring in {@see addGeoJson()}.
+     *
+     * @param callable(string): void $callback
+     */
+    public function onFeatureClick(callable $callback): self
+    {
+        $this->onFeatureClick = $callback;
+        return $this;
+    }
+
+    // ============================================================
+    // Map configuration (fluent; applied when the map is created)
+    // ============================================================
+
+    /**
+     * Override the tile layer. Defaults to OpenStreetMap.
+     *
+     * @param array<string,mixed> $options tile-layer options (maxZoom, …)
+     */
+    public function tile(string $url, array $options = []): self
+    {
+        $this->tileUrl = $url;
+        $this->tileOptions = $options;
+        return $this;
+    }
+
+    /**
+     * Options object for `L.map(key, …)` — minZoom, worldCopyJump,
+     * attributionControl, and so on.
+     *
+     * @param array<string,mixed> $options
+     */
+    public function mapOptions(array $options): self
+    {
+        $this->mapOptions = $options;
+        return $this;
+    }
+
+    /**
+     * Customise the container div (size, background…). The callback receives
+     * the div and returns it, e.g. `fn($d) => $d->minHeight(Unit::em(18))`.
+     * Without it the div gets a default 320px height.
+     *
+     * @param callable(mixed): mixed $styler
+     */
+    public function container(callable $styler): self
+    {
+        $this->containerStyler = $styler;
+        return $this;
+    }
+
+    // ============================================================
+    // GeoJSON overlay (native choropleth support, driven from PHP)
+    // ============================================================
+
+    /**
+     * Overlay a GeoJSON layer, fetched and built once when the map is created
+     * (cached by URL, so re-mounts don't refetch). Per-feature styling and
+     * labels are then pushed each render via {@see styleFeatures()},
+     * {@see showTooltips()} and {@see fitToFeature()} — all data-driven, so no
+     * hand-written map JS is needed. `$opts` is the runtime feature config:
+     *
+     *   idProps        string[]  feature properties to read the id from (first hit wins)
+     *   nameProps      string[]  feature properties to read the label name from
+     *   ids            string[]  allow-list — only these ids are drawn (omit for all)
+     *   defaultStyle   object    base path style for every feature
+     *   tooltipTemplate string   label HTML, with `{id}` / `{name}` placeholders
+     *   tooltipOptions object    Leaflet tooltip options (className, direction…)
+     *
+     * A feature click dispatches {@see EVENT_FEATURE} when a handler is set via
+     * {@see onFeatureClick()}.
+     *
+     * @param array<string,mixed> $opts
+     */
+    public function addGeoJson(string $url, array $opts = []): self
+    {
+        if ($this->onFeatureClick !== null) {
+            $opts['event'] = self::EVENT_FEATURE;
+            $opts['dispatchId'] = $this->key;
+        }
+        $this->geoJson = ['url' => $url, 'opts' => $opts];
+        return $this;
+    }
+
+    /**
+     * Push this render's per-feature style overrides — a map of feature id →
+     * style object. Any feature not listed reverts to the layer's default
+     * style. Applied to the (cached) map, so it recolours in place.
+     *
+     * @param array<string,array<string,mixed>> $overrides
+     */
+    public function styleFeatures(array $overrides): void
+    {
+        $this->geoOp('styleFeatures', $overrides);
+    }
+
+    /**
+     * Zoom the map to a feature's bounds — but only once per id: a repeat call
+     * with the same id is a no-op, so an unrelated re-render never yanks the
+     * user's current zoom. Use {@see clearFit()} to forget the last target.
+     *
+     * @param array<string,mixed> $options fitBounds options (padding, maxZoom…)
+     */
+    public function fitToFeature(string $id, array $options = []): void
+    {
+        $this->geoOp('fitToFeature', Js::str($id), $options);
+    }
+
+    /** Forget the last fitted feature, so the next {@see fitToFeature()} re-zooms. */
+    public function clearFit(): void
+    {
+        $this->geoOp('clearFit');
+    }
+
+    /** Show or hide the per-feature tooltips (labels). */
+    public function showTooltips(bool $on): void
+    {
+        $this->geoOp('showTooltips', $on);
+    }
+
+    /** Emit one `BrickLeaflet.<fn>(key, …)` call wrapped in Brick.ready. */
+    private function geoOp(string $fn, mixed ...$args): void
+    {
+        Js::ready(Js::invoke(Js::obj('BrickLeaflet', $fn), Js::str($this->key), ...$args));
     }
 
     // ============================================================
@@ -191,26 +354,30 @@ class Leaflet extends StatelessComponent
         $ref = $this->mapRef();
 
         $lines = [
-            // var map = L.map("key");
-            Js::assign("var map ", Js::invoke(Js::obj('L', 'map'), Js::str($this->key))),
+            // var map = L.map("key", {options});
+            Js::assign("var map ", Js::invoke(Js::obj('L', 'map'), Js::str($this->key), $this->mapOptions)),
             // window.leaflet[key] = map;
             Js::assign($ref, "map"),
             Js::invoke(
                 Js::obj(
-                    Js::invoke(Js::obj('L', 'tileLayer'),
-                        Js::str('https://tile.openstreetmap.org/{z}/{x}/{y}.png'),
-                        [
-                            'maxZoom' => 19,
-                            'attribution' => '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-                        ],
-                    ),
+                    Js::invoke(Js::obj('L', 'tileLayer'), Js::str($this->tileUrl), $this->tileOptions),
                     'addTo',
                 ),
                 "map",
             ),
+            Js::invoke(Js::obj("map", 'setView'), $this->initialCoords ?? [0, 0], $this->initialZoom),
         ];
 
-        $lines[] = Js::invoke(Js::obj("map", 'setView'), $this->initialCoords ?? [0, 0], $this->initialZoom);
+        // GeoJSON overlay (built once): hand the config to the runtime, which
+        // fetches, draws the features and wires their clicks.
+        if ($this->geoJson !== null) {
+            $lines[] = Js::invoke(
+                Js::obj('BrickLeaflet', 'addGeoJson'),
+                Js::str($this->key),
+                Js::str($this->geoJson['url']),
+                $this->geoJson['opts'],
+            );
+        }
 
         // Drain staged additions (markers, circles, polygons, popups)
         // into the same Brick.ready block, after map setup.
@@ -239,16 +406,25 @@ class Leaflet extends StatelessComponent
 
     protected function build(): VNode
     {
-        $map = UI::div()
-            ->width(Unit::full())
-            ->height(Unit::px(320))
-            ->background(Color::gray(100))
-            ->attr('id', $this->key);
+        $map = UI::div();
+        if ($this->containerStyler !== null) {
+            $map = ($this->containerStyler)($map) ?? $map;
+        } else {
+            $map->width(Unit::full())->height(Unit::px(320))->background(Color::gray(100));
+        }
+        $map->attr('id', $this->key);
 
         // Only register the click when a handler is set, so the map never
         // posts an unhandled click. The registration owns the event name.
         if ($this->onClick !== null) {
             $map->customEvent($this->onClick, $this->clickRegistration());
+        }
+
+        // Feature clicks are wired per feature inside the runtime, so this
+        // registration is a pure name-carrier (no diff wiring); it just tells
+        // the server which handler answers an EVENT_FEATURE dispatch.
+        if ($this->onFeatureClick !== null) {
+            $map->customEvent($this->onFeatureClick, new LeafletFeatureRegistration(self::EVENT_FEATURE));
         }
 
         return $map;
@@ -304,15 +480,185 @@ class Leaflet extends StatelessComponent
     }
 
     /**
-     * Pulls Leaflet's CSS + JS from the unpkg CDN, seeds
-     * `window.leafLet`, and registers event-data hydrators for the
-     * Leaflet-namespaced events so the server can turn the raw value
-     * arrays into strongly typed event objects when handlers fire.
+     * Tear a map down: remove the `L.map` and drop its runtime state. Call from
+     * the owning component's `deleted()` so re-opening the map builds a fresh
+     * one rather than resurrecting a detached container. The GeoJSON URL cache
+     * survives, so the next build doesn't refetch.
+     */
+    public static function teardown(string $key): void
+    {
+        Js::ready(Js::invoke(Js::obj('BrickLeaflet', 'destroy'), Js::str($key)));
+    }
+
+    /**
+     * Register the Leaflet library assets: pull its CSS + JS from the unpkg CDN,
+     * seed `window.leafLet` (the per-key map registry this wrapper caches
+     * instances in), and install the {@see runtimeJs()} client runtime. Call
+     * once from an App's `registerAssets()` — used by {@see \Samples\News\NewsApp}
+     * for this wrapper and by {@see \Samples\FlagQuiz\FlagQuizApp} for its
+     * GeoJSON world map, so the CDN links live in exactly one place.
      */
     public static function registerAssets(App $app): void
     {
-        $app->addStyle('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
-        $app->addScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+        $app->addStyle(self::CSS_URL);
+        $app->addScript(self::JS_URL);
         $app->addScriptInline('window.leafLet = {};');
+        $app->addScriptInline(self::runtimeJs());
+    }
+
+    /**
+     * The `BrickLeaflet` client runtime backing the native GeoJSON API. It owns
+     * the per-feature complexity that used to live in bespoke app glue: fetching
+     * (and caching) the GeoJSON, drawing the features, wiring their clicks to a
+     * server dispatch, and applying data-driven styles / labels / fit that PHP
+     * pushes each render. It is tolerant of call order (a per-render style push
+     * can arrive before the layer has loaded) and idempotent, so the map
+     * converges once the async fetch resolves.
+     */
+    private static function runtimeJs(): string
+    {
+        return <<<'JS'
+        window.BrickLeaflet = (function () {
+            var state = {};   // mapKey -> feature state
+            var cache = {};   // url    -> parsed GeoJSON (shared across rebuilds)
+
+            function ensure(key) {
+                return state[key] || (state[key] = {
+                    idProps: [], nameProps: [], defaultStyle: {}, ids: null,
+                    styles: {}, byId: {}, names: {},
+                    event: '', dispatchId: key,
+                    template: '', tooltipOpts: { permanent: true, direction: 'center' },
+                    tooltips: false, fit: null, fittedId: null, loaded: false
+                });
+            }
+
+            function idOf(feature, props) {
+                var p = feature.properties || {};
+                for (var i = 0; i < props.length; i++) {
+                    var v = p[props[i]];
+                    if (v && v !== '-99') return String(v).toLowerCase();
+                }
+                return '';
+            }
+
+            function nameOf(feature, props) {
+                var p = feature.properties || {};
+                for (var i = 0; i < props.length; i++) if (p[props[i]]) return p[props[i]];
+                return '';
+            }
+
+            // One id can own several features (a mainland plus its offshore
+            // territories), so the label goes on the first — the primary
+            // landmass in every dataset we use — not on each fragment.
+            function applyTooltips(key) {
+                var st = state[key];
+                if (!st || !st.template) return;
+                Object.keys(st.byId).forEach(function (id) {
+                    var layer = st.byId[id][0], has = !!layer.getTooltip();
+                    if (st.tooltips && !has) {
+                        var html = st.template.replace(/\{id\}/g, id).replace(/\{name\}/g, st.names[id] || '');
+                        layer.bindTooltip(html, st.tooltipOpts);
+                    } else if (!st.tooltips && has) {
+                        layer.unbindTooltip();
+                    }
+                });
+            }
+
+            // Bounds covering every feature that shares an id.
+            function boundsOf(layers) {
+                var b = layers[0].getBounds();
+                for (var i = 1; i < layers.length; i++) b.extend(layers[i].getBounds());
+                return b;
+            }
+
+            // Re-apply the desired state to a loaded map: recolour every feature,
+            // sync labels, and zoom to the target once per id.
+            function apply(key) {
+                var st = state[key], map = window.leafLet[key];
+                if (!st || !map || !st.loaded) return;
+                Object.keys(st.byId).forEach(function (id) {
+                    var style = st.styles[id] || st.defaultStyle;
+                    st.byId[id].forEach(function (layer) { layer.setStyle(style); });
+                });
+                applyTooltips(key);
+                if (st.fit && st.byId[st.fit.id] && st.fit.id !== st.fittedId) {
+                    try { map.fitBounds(boundsOf(st.byId[st.fit.id]), st.fit.opts); } catch (e) {}
+                    st.fittedId = st.fit.id;
+                }
+            }
+
+            function buildLayer(key, geo) {
+                var st = ensure(key), map = window.leafLet[key];
+                if (!map) return;
+                L.geoJSON(geo, {
+                    // Unidentifiable features, and (when an allow-list is set)
+                    // anything outside it, are never drawn at all — so they
+                    // can't be styled, labelled or clicked.
+                    filter: function (f) {
+                        var id = idOf(f, st.idProps);
+                        return !!id && (!st.ids || st.ids[id] === true);
+                    },
+                    style: function (f) { return st.styles[idOf(f, st.idProps)] || st.defaultStyle; },
+                    onEachFeature: function (f, layer) {
+                        var id = idOf(f, st.idProps);
+                        if (!id) return;
+                        if (st.byId[id]) st.byId[id].push(layer);
+                        else { st.byId[id] = [layer]; st.names[id] = nameOf(f, st.nameProps); }
+                        if (st.event) {
+                            layer.on('click', function () {
+                                Brick.dispatch(st.event, document.getElementById(st.dispatchId), id);
+                            });
+                        }
+                    }
+                }).addTo(map);
+                st.loaded = true;
+                // Leaflet needs a settle tick after the container is sized.
+                setTimeout(function () { map.invalidateSize(); apply(key); }, 60);
+            }
+
+            return {
+                addGeoJson: function (key, url, opts) {
+                    var st = ensure(key);
+                    opts = opts || {};
+                    st.idProps = opts.idProps || [];
+                    st.nameProps = opts.nameProps || [];
+                    st.defaultStyle = opts.defaultStyle || {};
+                    if (opts.ids && opts.ids.length) {
+                        st.ids = {};
+                        opts.ids.forEach(function (id) { st.ids[String(id).toLowerCase()] = true; });
+                    }
+                    st.event = opts.event || '';
+                    st.dispatchId = opts.dispatchId || key;
+                    st.template = opts.tooltipTemplate || '';
+                    if (opts.tooltipOptions) st.tooltipOpts = opts.tooltipOptions;
+                    if (cache[url]) buildLayer(key, cache[url]);
+                    else fetch(url).then(function (r) { return r.json(); }).then(function (geo) {
+                        cache[url] = geo; buildLayer(key, geo);
+                    });
+                },
+                styleFeatures: function (key, overrides) {
+                    ensure(key).styles = overrides || {};
+                    apply(key);
+                },
+                fitToFeature: function (key, id, opts) {
+                    ensure(key).fit = { id: id, opts: opts || {} };
+                    apply(key);
+                },
+                clearFit: function (key) {
+                    var st = ensure(key); st.fit = null; st.fittedId = null;
+                },
+                showTooltips: function (key, on) {
+                    ensure(key).tooltips = !!on;
+                    apply(key);
+                },
+                destroy: function (key) {
+                    var map = window.leafLet[key];
+                    if (map) { try { map.remove(); } catch (e) {} }
+                    delete window.leafLet[key];
+                    delete state[key];
+                }
+            };
+        })();
+        JS;
     }
 }
