@@ -49,6 +49,13 @@ class WorldMap extends Component
     private const FLAG_SEL_STYLE = ['color' => '#0f172a', 'weight' => 3,   'fillOpacity' => 1];
 
     /**
+     * Height of one flag in the tiled fill, in screen pixels. Big enough to
+     * read a flag at a glance, small enough that a country the size of France
+     * still shows several rather than a crop of one.
+     */
+    private const FLAG_TILE = 22;
+
+    /**
      * @param string[] $greens ISO-2 codes answered correctly
      * @param string[] $reds   ISO-2 codes answered wrong
      * @param Closure  $onPick fn(string $iso): void
@@ -86,10 +93,11 @@ class WorldMap extends Component
                 // Draw exactly the quiz catalogue and nothing else, so the map
                 // holds the same countries the flag quiz asks about.
                 'ids' => array_map(fn(Country $c) => $c->code, Country::all()),
-                // A flag is stretched over each shape it fills, so an island
-                // group has to be its own shape or its country's flag spans the
-                // open sea between the parts. Only worth the extra layers when
-                // there are flags to place.
+                // Explore is the mode that shows permanent labels, and a label
+                // sits on the first of its country's shapes. Split into one
+                // shape per landmass, biggest first, and each label lands on
+                // the mainland — undivided, the United States is one shape
+                // reaching Alaska and its label sits out there.
                 'split' => $this->flagFills,
                 'defaultStyle' => self::DEFAULT_STYLE,
                 // Compact flag + name pill; styled by .leaflet-tooltip.fq-label.
@@ -127,14 +135,15 @@ class WorldMap extends Component
     }
 
     /**
-     * Dress every country in its actual flag: the flag image is stretched over
-     * each landmass and clipped to its real outline. The focused country keeps
-     * its flag and gains a dark ring, so the highlight reads without hiding the
-     * thing the mode exists to show.
+     * Dress every country in its actual flag: the flag tiles across the
+     * country, at its own proportions, clipped to the real outline. The focused
+     * country keeps its flag and gains a dark ring, so the highlight reads
+     * without hiding the thing the mode exists to show.
      *
-     * Uses the 320px flags rather than the list's 160px thumbnails: a country
-     * fills most of the viewport once auto-zoom lands on it, and the thumbnail
-     * turns to mush at that size.
+     * Tiling rather than one stretched copy is what keeps the flags looking
+     * like flags — a country is never the shape of one, so fitting a single
+     * copy to the outline can only distort it. Small countries hold a copy or
+     * two, Russia holds hundreds, and every one is the right shape.
      *
      * @return array<string, array<string, mixed>> feature id → style
      */
@@ -143,7 +152,7 @@ class WorldMap extends Component
         $fills = [];
         $overrides = [];
         foreach (Country::all() as $country) {
-            $fill = new LeafletImageFill($country->code, $country->bigUrl());
+            $fill = new LeafletImageFill($country->code, $country->thumbUrl(), self::FLAG_TILE);
             $fills[] = $fill;
             $style = $country->code === $this->targetIso ? self::FLAG_SEL_STYLE : self::FLAG_STYLE;
             $overrides[$country->code] = $style + ['fillColor' => $fill->fill()];

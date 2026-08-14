@@ -188,9 +188,9 @@ class Leaflet extends StatelessComponent
      *   nameProps      string[]  feature properties to read the label name from
      *   ids            string[]  allow-list — only these ids are drawn (omit for all)
      *   split          bool      draw each polygon of a multi-part feature as its
-     *                            own layer, so a gradient fill and the label
-     *                            anchor follow each landmass rather than the
-     *                            feature's whole scattered bounding box
+     *                            own layer, so anything anchored to a layer —
+     *                            its label, its bounds — follows each part
+     *                            rather than the whole scattered set
      *   defaultStyle   object    base path style for every feature
      *   tooltipTemplate string   label HTML, with `{id}` / `{name}` placeholders
      *   tooltipOptions object    Leaflet tooltip options (className, direction…)
@@ -593,13 +593,12 @@ class Leaflet extends StatelessComponent
 
             // Split every MultiPolygon into one Feature per polygon, biggest
             // first, sharing the original's properties. Leaflet otherwise draws
-            // a multi-part feature as ONE path, so anything measured against
-            // that path — a gradient fill, the label anchor — is measured
-            // against the whole scattered set: Spain's image fill would be
-            // stretched across the Canaries, its label dropped in the Atlantic. Per
-            // polygon, each landmass gets its own paint at its own size, and the
-            // main one leads. Returns a new collection; the cached source is
-            // left untouched.
+            // a multi-part feature as ONE layer, so anything anchored to that
+            // layer belongs to the whole scattered set rather than to any part
+            // of it — a label placed at its centre lands between the pieces,
+            // out at sea. Per polygon, the label goes on the main landmass
+            // because the biggest leads. Returns a new collection; the cached
+            // source is left untouched.
             function explode(geo) {
                 var out = [];
                 (geo.features || []).forEach(function (f) {
@@ -637,25 +636,46 @@ class Leaflet extends StatelessComponent
                 });
             }
 
-            // One image fill: a single-tile pattern holding the picture,
-            // stretched over the shape's bounding box. objectBoundingBox units
-            // throughout mean the same definition fits any shape that
-            // references it, and preserveAspectRatio="none" keeps the whole
-            // picture visible rather than cropping it to fit.
+            // One image fill: a tile of the picture, repeated across whatever
+            // shape references it. userSpaceOnUse (rather than sizing the tile
+            // to each shape's bounding box) is what keeps the picture out of
+            // the shape's proportions — the tile is a fixed number of screen
+            // pixels, so it reads the same everywhere and a bigger shape just
+            // holds more copies.
             function imagePattern(def) {
                 var pattern = document.createElementNS(SVG_NS, 'pattern');
-                pattern.setAttribute('id', 'brick-fill-' + def.id);
-                pattern.setAttribute('patternContentUnits', 'objectBoundingBox');
-                pattern.setAttribute('width', '1');
-                pattern.setAttribute('height', '1');
                 var image = document.createElementNS(SVG_NS, 'image');
+                var height = def.tile || 24;
+
+                pattern.setAttribute('id', 'brick-fill-' + def.id);
+                pattern.setAttribute('patternUnits', 'userSpaceOnUse');
                 image.setAttribute('href', def.url);
                 image.setAttribute('x', '0');
                 image.setAttribute('y', '0');
-                image.setAttribute('width', '1');
-                image.setAttribute('height', '1');
                 image.setAttribute('preserveAspectRatio', 'none');
                 pattern.appendChild(image);
+
+                function resize(width) {
+                    pattern.setAttribute('width', width);
+                    pattern.setAttribute('height', height);
+                    image.setAttribute('width', width);
+                    image.setAttribute('height', height);
+                }
+
+                // Start on 3:2 — the common case — then correct once the real
+                // proportions are known. Pictures vary (among flags alone,
+                // Switzerland is square and Qatar nearly 3:1), and only the
+                // bitmap itself can say. The decode comes from cache, since the
+                // pattern is already fetching the same URL.
+                resize(Math.round(height * 1.5));
+                var probe = new Image();
+                probe.onload = function () {
+                    if (probe.naturalHeight) {
+                        resize(Math.round(height * probe.naturalWidth / probe.naturalHeight));
+                    }
+                };
+                probe.src = def.url;
+
                 return pattern;
             }
 
