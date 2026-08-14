@@ -59,11 +59,11 @@ class WorldMap extends Component
      * Breathing room between neighbouring flags, and the colour behind them.
      * Without a gap, striped flags run into their own copies and a country
      * reads as one banded field; the gap makes each copy a flag again. The
-     * backing is a shade darker than the plain-country fill so a mostly-white
-     * flag still has an edge to sit against.
+     * backing is near-white, so the colour on the map is the flags' own and
+     * the gaps read as paper between them.
      */
     private const FLAG_GAP = 5;
-    private const FLAG_BACKDROP = '#dfe6ee';
+    private const FLAG_BACKDROP = '#f7fafc';
 
     /**
      * @param string[] $greens ISO-2 codes answered correctly
