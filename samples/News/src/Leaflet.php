@@ -74,8 +74,8 @@ class Leaflet extends StatelessComponent
     /** @var array{url:string,opts:array<string,mixed>}|null GeoJSON overlay, built once in created(). */
     private ?array $geoJson = null;
 
-    /** @var LeafletBandFill[] Banded fills features may reference, defined once in created(). */
-    private array $bandFills = [];
+    /** @var LeafletImageFill[] Image fills features may reference, defined once in created(). */
+    private array $imageFills = [];
 
     /**
      * Decorative `addMarker` / `addCircle` / `addPolygon` / `addPopup`
@@ -211,17 +211,17 @@ class Leaflet extends StatelessComponent
     }
 
     /**
-     * Declare the banded fills this map's features may use — see
-     * {@see LeafletBandFill}. Configuration, not per-render state: a fill's
-     * colours don't change, so the (potentially large) set is emitted once in
+     * Declare the image fills this map's features may use — see
+     * {@see LeafletImageFill}. Configuration, not per-render state: a fill's
+     * image doesn't change, so the (potentially large) set is emitted once in
      * `created()` alongside the layer, and each render's
      * {@see styleFeatures()} only names the ones it wants.
      *
-     * @param LeafletBandFill[] $fills
+     * @param LeafletImageFill[] $fills
      */
-    public function bandFills(array $fills): self
+    public function imageFills(array $fills): self
     {
-        $this->bandFills = $fills;
+        $this->imageFills = $fills;
         return $this;
     }
 
@@ -392,11 +392,11 @@ class Leaflet extends StatelessComponent
 
         // Fill definitions first, so the layer's very first paint can already
         // reference them.
-        if ($this->bandFills !== []) {
+        if ($this->imageFills !== []) {
             $lines[] = Js::invoke(
-                Js::obj('BrickLeaflet', 'defineBands'),
+                Js::obj('BrickLeaflet', 'defineFills'),
                 Js::str($this->key),
-                $this->bandFills,
+                $this->imageFills,
             );
         }
 
@@ -562,7 +562,7 @@ class Leaflet extends StatelessComponent
                     event: '', dispatchId: key,
                     template: '', tooltipOpts: { permanent: true, direction: 'center' },
                     tooltips: false, fit: null, fittedId: null, loaded: false,
-                    bands: [], bandsSig: '', bandsDrawn: null
+                    fills: [], fillsSig: '', fillsDrawn: null
                 });
             }
 
@@ -595,8 +595,8 @@ class Leaflet extends StatelessComponent
             // first, sharing the original's properties. Leaflet otherwise draws
             // a multi-part feature as ONE path, so anything measured against
             // that path — a gradient fill, the label anchor — is measured
-            // against the whole scattered set: Spain's bands would be stretched
-            // across the Canaries, its label dropped in the Atlantic. Per
+            // against the whole scattered set: Spain's image fill would be
+            // stretched across the Canaries, its label dropped in the Atlantic. Per
             // polygon, each landmass gets its own paint at its own size, and the
             // main one leads. Returns a new collection; the cached source is
             // left untouched.
@@ -637,49 +637,48 @@ class Leaflet extends StatelessComponent
                 });
             }
 
-            // One banded fill: n colours become n equal bands. Two stops per
-            // colour (its start and its end) keep the edges hard instead of
-            // blending, and the default objectBoundingBox units mean the same
-            // definition fits any shape that references it.
-            function bandGradient(def) {
-                var gradient = document.createElementNS(SVG_NS, 'linearGradient');
-                gradient.setAttribute('id', 'brick-band-' + def.id);
-                gradient.setAttribute('x1', '0');
-                gradient.setAttribute('y1', '0');
-                gradient.setAttribute('x2', def.vertical ? '1' : '0');
-                gradient.setAttribute('y2', def.vertical ? '0' : '1');
-                var n = def.colors.length;
-                def.colors.forEach(function (color, i) {
-                    [i / n, (i + 1) / n].forEach(function (offset) {
-                        var stop = document.createElementNS(SVG_NS, 'stop');
-                        stop.setAttribute('offset', (offset * 100) + '%');
-                        stop.setAttribute('stop-color', color);
-                        gradient.appendChild(stop);
-                    });
-                });
-                return gradient;
+            // One image fill: a single-tile pattern holding the picture,
+            // stretched over the shape's bounding box. objectBoundingBox units
+            // throughout mean the same definition fits any shape that
+            // references it, and preserveAspectRatio="none" keeps the whole
+            // picture visible rather than cropping it to fit.
+            function imagePattern(def) {
+                var pattern = document.createElementNS(SVG_NS, 'pattern');
+                pattern.setAttribute('id', 'brick-fill-' + def.id);
+                pattern.setAttribute('patternContentUnits', 'objectBoundingBox');
+                pattern.setAttribute('width', '1');
+                pattern.setAttribute('height', '1');
+                var image = document.createElementNS(SVG_NS, 'image');
+                image.setAttribute('href', def.url);
+                image.setAttribute('x', '0');
+                image.setAttribute('y', '0');
+                image.setAttribute('width', '1');
+                image.setAttribute('height', '1');
+                image.setAttribute('preserveAspectRatio', 'none');
+                pattern.appendChild(image);
+                return pattern;
             }
 
-            // Park the gradients in a <defs> inside the map's own overlay <svg>,
-            // so a feature style can name one as fillColor: url(#brick-band-x).
-            // Rebuilt only when the definitions actually change, so re-pushing
-            // the same set every render costs one string compare.
-            function applyBands(key) {
+            // Park the patterns in a <defs> inside the map's own overlay <svg>,
+            // so a feature style can name one as fillColor: url(#brick-fill-x).
+            // Rebuilt only when the definitions actually change — otherwise
+            // every re-render would drop and refetch every image.
+            function applyFills(key) {
                 var st = state[key], map = window.leafLet[key];
-                if (!st || !map || !st.bands.length) return;
+                if (!st || !map || !st.fills.length) return;
                 var pane = map.getPane('overlayPane');
                 var svg = pane && pane.querySelector('svg');
                 if (!svg) return;
-                var defs = svg.querySelector('defs.brick-bands');
-                if (defs && st.bandsDrawn === st.bandsSig) return;
+                var defs = svg.querySelector('defs.brick-fills');
+                if (defs && st.fillsDrawn === st.fillsSig) return;
                 if (!defs) {
                     defs = document.createElementNS(SVG_NS, 'defs');
-                    defs.setAttribute('class', 'brick-bands');
+                    defs.setAttribute('class', 'brick-fills');
                     svg.insertBefore(defs, svg.firstChild);
                 }
                 while (defs.firstChild) defs.removeChild(defs.firstChild);
-                st.bands.forEach(function (def) { defs.appendChild(bandGradient(def)); });
-                st.bandsDrawn = st.bandsSig;
+                st.fills.forEach(function (def) { defs.appendChild(imagePattern(def)); });
+                st.fillsDrawn = st.fillsSig;
             }
 
             // Bounds covering every feature that shares an id.
@@ -694,8 +693,8 @@ class Leaflet extends StatelessComponent
             function apply(key) {
                 var st = state[key], map = window.leafLet[key];
                 if (!st || !map || !st.loaded) return;
-                // Gradients first: a style naming one must find it defined.
-                applyBands(key);
+                // Patterns first: a style naming one must find it defined.
+                applyFills(key);
                 Object.keys(st.byId).forEach(function (id) {
                     var style = st.styles[id] || st.defaultStyle;
                     st.byId[id].forEach(function (layer) { layer.setStyle(style); });
@@ -758,10 +757,10 @@ class Leaflet extends StatelessComponent
                         cache[url] = geo; buildLayer(key, geo);
                     });
                 },
-                defineBands: function (key, defs) {
+                defineFills: function (key, defs) {
                     var st = ensure(key);
-                    st.bands = defs || [];
-                    st.bandsSig = JSON.stringify(st.bands);
+                    st.fills = defs || [];
+                    st.fillsSig = JSON.stringify(st.fills);
                     apply(key);
                 },
                 styleFeatures: function (key, overrides) {
