@@ -573,7 +573,11 @@ class FlagQuiz extends Component
             );
     }
 
-    /** Explore mode: a country list on the left, the world map on the right. */
+    /**
+     * Explore mode: a country list on the left, the world map on the right —
+     * with every country wearing its own flag's colours, so the map itself
+     * teaches the flag/place pairing the quiz modes then test.
+     */
     private function buildExplore(): UIElement
     {
         $selected = $this->exploreIso !== '' ? Country::byCode($this->exploreIso) : null;
@@ -647,6 +651,7 @@ class FlagQuiz extends Component
                                     fn(string $iso) => $this->exploreSelect($iso),
                                     labels: true,
                                     autoZoom: $this->autoZoom,
+                                    flagColors: true,
                                 ),
                             ),
                     ),

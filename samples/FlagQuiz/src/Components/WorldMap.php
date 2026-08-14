@@ -8,7 +8,10 @@ use BrickPHP\UI\Unit;
 use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 use Samples\FlagQuiz\Country;
+use Samples\FlagQuiz\FlagColor;
+use Samples\FlagQuiz\FlagTraits;
 use Samples\News\Leaflet;
+use Samples\News\LeafletBandFill;
 
 /**
  * The Leaflet world map for Locations mode. Built on the shared {@see Leaflet}
@@ -40,12 +43,17 @@ class WorldMap extends Component
     private const RED_STYLE     = ['color' => '#dc2626', 'weight' => 1,   'fillColor' => '#fca5a5', 'fillOpacity' => 0.75];
     private const TARGET_STYLE  = ['color' => '#2563eb', 'weight' => 2.5, 'fillColor' => '#93c5fd', 'fillOpacity' => 0.5];
 
+    /** Outline + focus ring for a country wearing its flag's colours. */
+    private const FLAG_STYLE     = ['color' => '#475569', 'weight' => 0.5, 'fillOpacity' => 0.92];
+    private const FLAG_SEL_STYLE = ['color' => '#0f172a', 'weight' => 3,   'fillOpacity' => 1];
+
     /**
      * @param string[] $greens ISO-2 codes answered correctly
      * @param string[] $reds   ISO-2 codes answered wrong
      * @param Closure  $onPick fn(string $iso): void
      * @param bool     $labels show each country's flag + name on the map (Explore)
      * @param bool     $autoZoom zoom the map to the target country on each render
+     * @param bool     $flagColors fill every country with its own flag's colours (Explore)
      */
     public function __construct(
         private string $targetIso,
@@ -54,6 +62,7 @@ class WorldMap extends Component
         private Closure $onPick,
         private bool $labels = false,
         private bool $autoZoom = true,
+        private bool $flagColors = false,
     ) {}
 
     protected function deleted(): void
@@ -76,6 +85,11 @@ class WorldMap extends Component
                 // Draw exactly the quiz catalogue and nothing else, so the map
                 // holds the same countries the flag quiz asks about.
                 'ids' => array_map(fn(Country $c) => $c->code, Country::all()),
+                // Flag bands are measured against each shape they fill, so an
+                // island group has to be its own shape or its country's bands
+                // stretch across the open sea between the parts. Only worth the
+                // extra layers when there are bands to place.
+                'split' => $this->flagColors,
                 'defaultStyle' => self::DEFAULT_STYLE,
                 // Compact flag + name pill; styled by .leaflet-tooltip.fq-label.
                 'tooltipTemplate' => '<img src="https://flagcdn.com/w20/{id}.png" alt=""><span>{name}</span>',
@@ -88,7 +102,7 @@ class WorldMap extends Component
         // Push this render's colouring. Precedence green > red > target: apply
         // target first, then reds, then greens last so a correct/wrong answer
         // keeps its colour.
-        $overrides = [$this->targetIso => self::TARGET_STYLE];
+        $overrides = $this->flagColors ? $this->flagFills($map) : [$this->targetIso => self::TARGET_STYLE];
         foreach ($this->reds as $iso) {
             $overrides[$iso] = self::RED_STYLE;
         }
@@ -109,5 +123,40 @@ class WorldMap extends Component
         }
 
         return $map;
+    }
+
+    /**
+     * Dress every country in its own flag: the {@see FlagTraits} palette becomes
+     * a banded fill, painted top-to-bottom (or hoist-to-fly for a vertically
+     * divided flag) and clipped to the country's real outline. The focused
+     * country keeps its flag and gains a dark ring, so the highlight reads
+     * without hiding the colours the mode exists to show.
+     *
+     * @return array<string, array<string, mixed>> feature id → style
+     */
+    private function flagFills(Leaflet $map): array
+    {
+        $fills = [];
+        $overrides = [];
+        foreach (Country::all() as $country) {
+            $traits = FlagTraits::for($country->code);
+            if ($traits->colors === []) {
+                // No catalogued palette — nothing to band, so leave it plain
+                // rather than referencing an empty gradient.
+                $overrides[$country->code] = self::DEFAULT_STYLE;
+                continue;
+            }
+            $fill = new LeafletBandFill(
+                $country->code,
+                array_map(fn(FlagColor $color) => $color->hex(), $traits->colors),
+                $traits->bandsAreVertical(),
+            );
+            $fills[] = $fill;
+            $style = $country->code === $this->targetIso ? self::FLAG_SEL_STYLE : self::FLAG_STYLE;
+            $overrides[$country->code] = $style + ['fillColor' => $fill->fill()];
+        }
+        $map->bandFills($fills);
+
+        return $overrides;
     }
 }

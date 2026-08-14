@@ -74,6 +74,9 @@ class Leaflet extends StatelessComponent
     /** @var array{url:string,opts:array<string,mixed>}|null GeoJSON overlay, built once in created(). */
     private ?array $geoJson = null;
 
+    /** @var LeafletBandFill[] Banded fills features may reference, defined once in created(). */
+    private array $bandFills = [];
+
     /**
      * Decorative `addMarker` / `addCircle` / `addPolygon` / `addPopup`
      * calls buffer their rendered JS-expression strings here. The
@@ -184,6 +187,10 @@ class Leaflet extends StatelessComponent
      *   idProps        string[]  feature properties to read the id from (first hit wins)
      *   nameProps      string[]  feature properties to read the label name from
      *   ids            string[]  allow-list — only these ids are drawn (omit for all)
+     *   split          bool      draw each polygon of a multi-part feature as its
+     *                            own layer, so a gradient fill and the label
+     *                            anchor follow each landmass rather than the
+     *                            feature's whole scattered bounding box
      *   defaultStyle   object    base path style for every feature
      *   tooltipTemplate string   label HTML, with `{id}` / `{name}` placeholders
      *   tooltipOptions object    Leaflet tooltip options (className, direction…)
@@ -200,6 +207,21 @@ class Leaflet extends StatelessComponent
             $opts['dispatchId'] = $this->key;
         }
         $this->geoJson = ['url' => $url, 'opts' => $opts];
+        return $this;
+    }
+
+    /**
+     * Declare the banded fills this map's features may use — see
+     * {@see LeafletBandFill}. Configuration, not per-render state: a fill's
+     * colours don't change, so the (potentially large) set is emitted once in
+     * `created()` alongside the layer, and each render's
+     * {@see styleFeatures()} only names the ones it wants.
+     *
+     * @param LeafletBandFill[] $fills
+     */
+    public function bandFills(array $fills): self
+    {
+        $this->bandFills = $fills;
         return $this;
     }
 
@@ -368,6 +390,16 @@ class Leaflet extends StatelessComponent
             Js::invoke(Js::obj("map", 'setView'), $this->initialCoords ?? [0, 0], $this->initialZoom),
         ];
 
+        // Fill definitions first, so the layer's very first paint can already
+        // reference them.
+        if ($this->bandFills !== []) {
+            $lines[] = Js::invoke(
+                Js::obj('BrickLeaflet', 'defineBands'),
+                Js::str($this->key),
+                $this->bandFills,
+            );
+        }
+
         // GeoJSON overlay (built once): hand the config to the runtime, which
         // fetches, draws the features and wires their clicks.
         if ($this->geoJson !== null) {
@@ -521,14 +553,16 @@ class Leaflet extends StatelessComponent
         window.BrickLeaflet = (function () {
             var state = {};   // mapKey -> feature state
             var cache = {};   // url    -> parsed GeoJSON (shared across rebuilds)
+            var SVG_NS = 'http://www.w3.org/2000/svg';
 
             function ensure(key) {
                 return state[key] || (state[key] = {
-                    idProps: [], nameProps: [], defaultStyle: {}, ids: null,
+                    idProps: [], nameProps: [], defaultStyle: {}, ids: null, split: false,
                     styles: {}, byId: {}, names: {},
                     event: '', dispatchId: key,
                     template: '', tooltipOpts: { permanent: true, direction: 'center' },
-                    tooltips: false, fit: null, fittedId: null, loaded: false
+                    tooltips: false, fit: null, fittedId: null, loaded: false,
+                    bands: [], bandsSig: '', bandsDrawn: null
                 });
             }
 
@@ -545,6 +579,45 @@ class Leaflet extends StatelessComponent
                 var p = feature.properties || {};
                 for (var i = 0; i < props.length; i++) if (p[props[i]]) return p[props[i]];
                 return '';
+            }
+
+            // Rough size of a polygon, from the shoelace area of its outer ring.
+            // Only ever compared against its siblings, so raw degrees are fine.
+            function ringArea(polygon) {
+                var ring = polygon[0], sum = 0;
+                for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                    sum += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+                }
+                return Math.abs(sum / 2);
+            }
+
+            // Split every MultiPolygon into one Feature per polygon, biggest
+            // first, sharing the original's properties. Leaflet otherwise draws
+            // a multi-part feature as ONE path, so anything measured against
+            // that path — a gradient fill, the label anchor — is measured
+            // against the whole scattered set: Spain's bands would be stretched
+            // across the Canaries, its label dropped in the Atlantic. Per
+            // polygon, each landmass gets its own paint at its own size, and the
+            // main one leads. Returns a new collection; the cached source is
+            // left untouched.
+            function explode(geo) {
+                var out = [];
+                (geo.features || []).forEach(function (f) {
+                    if (!f.geometry || f.geometry.type !== 'MultiPolygon') {
+                        out.push(f);
+                        return;
+                    }
+                    f.geometry.coordinates.slice()
+                        .sort(function (a, b) { return ringArea(b) - ringArea(a); })
+                        .forEach(function (coordinates) {
+                            out.push({
+                                type: 'Feature',
+                                properties: f.properties,
+                                geometry: { type: 'Polygon', coordinates: coordinates }
+                            });
+                        });
+                });
+                return { type: 'FeatureCollection', features: out };
             }
 
             // One id can own several features (a mainland plus its offshore
@@ -564,6 +637,51 @@ class Leaflet extends StatelessComponent
                 });
             }
 
+            // One banded fill: n colours become n equal bands. Two stops per
+            // colour (its start and its end) keep the edges hard instead of
+            // blending, and the default objectBoundingBox units mean the same
+            // definition fits any shape that references it.
+            function bandGradient(def) {
+                var gradient = document.createElementNS(SVG_NS, 'linearGradient');
+                gradient.setAttribute('id', 'brick-band-' + def.id);
+                gradient.setAttribute('x1', '0');
+                gradient.setAttribute('y1', '0');
+                gradient.setAttribute('x2', def.vertical ? '1' : '0');
+                gradient.setAttribute('y2', def.vertical ? '0' : '1');
+                var n = def.colors.length;
+                def.colors.forEach(function (color, i) {
+                    [i / n, (i + 1) / n].forEach(function (offset) {
+                        var stop = document.createElementNS(SVG_NS, 'stop');
+                        stop.setAttribute('offset', (offset * 100) + '%');
+                        stop.setAttribute('stop-color', color);
+                        gradient.appendChild(stop);
+                    });
+                });
+                return gradient;
+            }
+
+            // Park the gradients in a <defs> inside the map's own overlay <svg>,
+            // so a feature style can name one as fillColor: url(#brick-band-x).
+            // Rebuilt only when the definitions actually change, so re-pushing
+            // the same set every render costs one string compare.
+            function applyBands(key) {
+                var st = state[key], map = window.leafLet[key];
+                if (!st || !map || !st.bands.length) return;
+                var pane = map.getPane('overlayPane');
+                var svg = pane && pane.querySelector('svg');
+                if (!svg) return;
+                var defs = svg.querySelector('defs.brick-bands');
+                if (defs && st.bandsDrawn === st.bandsSig) return;
+                if (!defs) {
+                    defs = document.createElementNS(SVG_NS, 'defs');
+                    defs.setAttribute('class', 'brick-bands');
+                    svg.insertBefore(defs, svg.firstChild);
+                }
+                while (defs.firstChild) defs.removeChild(defs.firstChild);
+                st.bands.forEach(function (def) { defs.appendChild(bandGradient(def)); });
+                st.bandsDrawn = st.bandsSig;
+            }
+
             // Bounds covering every feature that shares an id.
             function boundsOf(layers) {
                 var b = layers[0].getBounds();
@@ -576,6 +694,8 @@ class Leaflet extends StatelessComponent
             function apply(key) {
                 var st = state[key], map = window.leafLet[key];
                 if (!st || !map || !st.loaded) return;
+                // Gradients first: a style naming one must find it defined.
+                applyBands(key);
                 Object.keys(st.byId).forEach(function (id) {
                     var style = st.styles[id] || st.defaultStyle;
                     st.byId[id].forEach(function (layer) { layer.setStyle(style); });
@@ -590,6 +710,7 @@ class Leaflet extends StatelessComponent
             function buildLayer(key, geo) {
                 var st = ensure(key), map = window.leafLet[key];
                 if (!map) return;
+                if (st.split) geo = explode(geo);
                 L.geoJSON(geo, {
                     // Unidentifiable features, and (when an allow-list is set)
                     // anything outside it, are never drawn at all — so they
@@ -623,6 +744,7 @@ class Leaflet extends StatelessComponent
                     st.idProps = opts.idProps || [];
                     st.nameProps = opts.nameProps || [];
                     st.defaultStyle = opts.defaultStyle || {};
+                    st.split = !!opts.split;
                     if (opts.ids && opts.ids.length) {
                         st.ids = {};
                         opts.ids.forEach(function (id) { st.ids[String(id).toLowerCase()] = true; });
@@ -635,6 +757,12 @@ class Leaflet extends StatelessComponent
                     else fetch(url).then(function (r) { return r.json(); }).then(function (geo) {
                         cache[url] = geo; buildLayer(key, geo);
                     });
+                },
+                defineBands: function (key, defs) {
+                    var st = ensure(key);
+                    st.bands = defs || [];
+                    st.bandsSig = JSON.stringify(st.bands);
+                    apply(key);
                 },
                 styleFeatures: function (key, overrides) {
                     ensure(key).styles = overrides || {};
