@@ -646,20 +646,37 @@ class Leaflet extends StatelessComponent
                 var pattern = document.createElementNS(SVG_NS, 'pattern');
                 var image = document.createElementNS(SVG_NS, 'image');
                 var height = def.tile || 24;
+                var gap = def.gap || 0;
+                var backdrop = null;
 
                 pattern.setAttribute('id', 'brick-fill-' + def.id);
                 pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+
+                // The gap is padding around the picture: half of it on each
+                // side, so a copy sits a full gap away from its neighbours.
+                // Anything painted behind has to cover the tile, gap included.
+                if (def.background) {
+                    backdrop = document.createElementNS(SVG_NS, 'rect');
+                    backdrop.setAttribute('x', '0');
+                    backdrop.setAttribute('y', '0');
+                    backdrop.setAttribute('fill', def.background);
+                    pattern.appendChild(backdrop);
+                }
                 image.setAttribute('href', def.url);
-                image.setAttribute('x', '0');
-                image.setAttribute('y', '0');
+                image.setAttribute('x', gap / 2);
+                image.setAttribute('y', gap / 2);
                 image.setAttribute('preserveAspectRatio', 'none');
                 pattern.appendChild(image);
 
                 function resize(width) {
-                    pattern.setAttribute('width', width);
-                    pattern.setAttribute('height', height);
+                    pattern.setAttribute('width', width + gap);
+                    pattern.setAttribute('height', height + gap);
                     image.setAttribute('width', width);
                     image.setAttribute('height', height);
+                    if (backdrop) {
+                        backdrop.setAttribute('width', width + gap);
+                        backdrop.setAttribute('height', height + gap);
+                    }
                 }
 
                 // Start on 3:2 — the common case — then correct once the real

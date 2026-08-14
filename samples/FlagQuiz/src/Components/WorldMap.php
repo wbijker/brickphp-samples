@@ -56,6 +56,16 @@ class WorldMap extends Component
     private const FLAG_TILE = 22;
 
     /**
+     * Breathing room between neighbouring flags, and the colour behind them.
+     * Without a gap, striped flags run into their own copies and a country
+     * reads as one banded field; the gap makes each copy a flag again. The
+     * backing is a shade darker than the plain-country fill so a mostly-white
+     * flag still has an edge to sit against.
+     */
+    private const FLAG_GAP = 5;
+    private const FLAG_BACKDROP = '#dfe6ee';
+
+    /**
      * @param string[] $greens ISO-2 codes answered correctly
      * @param string[] $reds   ISO-2 codes answered wrong
      * @param Closure  $onPick fn(string $iso): void
@@ -152,7 +162,13 @@ class WorldMap extends Component
         $fills = [];
         $overrides = [];
         foreach (Country::all() as $country) {
-            $fill = new LeafletImageFill($country->code, $country->thumbUrl(), self::FLAG_TILE);
+            $fill = new LeafletImageFill(
+                $country->code,
+                $country->thumbUrl(),
+                tile: self::FLAG_TILE,
+                gap: self::FLAG_GAP,
+                background: self::FLAG_BACKDROP,
+            );
             $fills[] = $fill;
             $style = $country->code === $this->targetIso ? self::FLAG_SEL_STYLE : self::FLAG_STYLE;
             $overrides[$country->code] = $style + ['fillColor' => $fill->fill()];
