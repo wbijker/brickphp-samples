@@ -12,6 +12,7 @@ use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 use HeroIcons\HeroIcons;
 use Samples\FlagQuiz\Answer;
+use Samples\FlagQuiz\Duration;
 use Samples\FlagQuiz\Palette;
 
 /**
@@ -19,9 +20,21 @@ use Samples\FlagQuiz\Palette;
  * a row of stats — flags answered, accuracy, the running right / wrong counts,
  * and the elapsed time, each with an icon. The values shrink a step on phones
  * so all five cells fit a narrow row without overflow.
+ *
+ * The time cell carries the elapsed seconds as well as the text, so the client
+ * ticker in {@see FlagQuizApp} can count on from the server's figure between
+ * renders — see {@see TIMER_ID}.
  */
 class ScoreBar extends Component
 {
+    /**
+     * Handle the client ticker looks for, and the attribute it reads the
+     * server's elapsed seconds from. The script builds the same strings, so
+     * the two must stay in step.
+     */
+    public const TIMER_ID = 'fq-timer';
+    public const TIMER_SECONDS_ATTR = 'data-fq-seconds';
+
     /** @param Answer[] $recent last 5 attempt outcomes for the history strip */
     public function __construct(
         private int $answered,
@@ -29,7 +42,7 @@ class ScoreBar extends Component
         private int $score,
         private int $right,
         private int $wrong,
-        private string $time,
+        private Duration $time,
         private array $recent,
     ) {}
 
@@ -51,12 +64,17 @@ class ScoreBar extends Component
                     $this->cell(HeroIcons::ChartBar('none', 1.5, 'currentColor', ''), $this->score . '%', 'Score', StatTone::Ink),
                     $this->cell(HeroIcons::Check('none', 2, 'currentColor', ''), (string)$this->right, 'Right', StatTone::Right),
                     $this->cell(HeroIcons::XMark('none', 2, 'currentColor', ''), (string)$this->wrong, 'Wrong', StatTone::Wrong),
-                    $this->cell(HeroIcons::Clock('none', 1.5, 'currentColor', ''), $this->time, 'Time', StatTone::Ink),
+                    $this->cell(HeroIcons::Clock('none', 1.5, 'currentColor', ''), $this->time->clock(), 'Time', StatTone::Ink, ticks: true),
                 ),
             );
     }
 
-    private function cell(VNode $icon, string $value, string $label, StatTone $tone): UIElement
+    /**
+     * One stat cell. `$ticks` marks the cell the client timer owns between
+     * renders: it gets the handle the script looks for and the server's own
+     * count of seconds to carry on from.
+     */
+    private function cell(VNode $icon, string $value, string $label, StatTone $tone, bool $ticks = false): UIElement
     {
         $labelRow = UI::row()
             ->alignMiddle()
@@ -68,6 +86,23 @@ class ScoreBar extends Component
             );
 
         if (!$tone->isTally()) {
+            $valueText = UI::text($value)
+                ->weight(FontWeight::SemiBold)
+                ->fontSize(FontSize::Base)
+                ->fontSize(FontSize::Large, Pseudo::sm())
+                ->color(Palette::ink())
+                // Force-patched: the client ticker has been writing into this
+                // node, so the server's own before/after renders agreeing says
+                // nothing about what the DOM currently shows.
+                ->invalidateText();
+
+            if ($ticks) {
+                $valueText
+                    ->attr('id', self::TIMER_ID)
+                    ->attr(self::TIMER_SECONDS_ATTR, (string)$this->time->seconds)
+                    ->invalidateAttr(self::TIMER_SECONDS_ATTR);
+            }
+
             return UI::column()
                 ->grow()
                 ->alignCenter()
@@ -76,15 +111,7 @@ class ScoreBar extends Component
                 ->borderColor(Palette::border())
                 ->padding(x: Unit::px(8), y: Unit::px(13))
                 ->padding(x: Unit::px(10), pseudo: Pseudo::sm())
-                ->content(
-                    UI::text($value)
-                        ->weight(FontWeight::SemiBold)
-                        ->fontSize(FontSize::Base)
-                        ->fontSize(FontSize::Large, Pseudo::sm())
-                        ->color(Palette::ink())
-                        ->invalidateText(),
-                    $labelRow,
-                );
+                ->content($valueText, $labelRow);
         }
 
         // Right / wrong tally: both children are keyed so a changed value

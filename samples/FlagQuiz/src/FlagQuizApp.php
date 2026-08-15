@@ -6,6 +6,7 @@ use BrickPHP\State\SessionStateManager;
 use BrickPHP\State\StateManager;
 use BrickPHP\VNode\App;
 use BrickPHP\VNode\VNode;
+use Samples\FlagQuiz\Components\ScoreBar;
 use Samples\News\Leaflet;
 
 /**
@@ -32,6 +33,10 @@ class FlagQuizApp extends App
 
     protected function registerAssets(App $app): void
     {
+        // The handles the ticker script and the scorebar agree on.
+        $timerId = ScoreBar::TIMER_ID;
+        $secondsAttr = ScoreBar::TIMER_SECONDS_ATTR;
+
         // A quick scale "pop" used to flag a changed value (the right / wrong
         // tallies). Re-keying the element on change restarts the animation.
         $app->addStyleInline(<<<'CSS'
@@ -57,6 +62,44 @@ class FlagQuizApp extends App
                 e.preventDefault();
                 next.click();
             });
+            JS);
+
+        // The elapsed-time cell only changes when something is sent to the
+        // server, which during a quiz can be many seconds apart — long enough
+        // for a clock to look stopped. The server stays the authority: it
+        // renders the seconds it has counted, and this script counts on from
+        // that figure, re-anchoring whenever a render brings a new one. So the
+        // display never drifts from the server for more than one round trip,
+        // and a paused, throttled or backgrounded tab corrects itself on the
+        // next one rather than accumulating error.
+        //
+        // It polls faster than it displays: at exactly 1s the tick would land
+        // an arbitrary fraction of a second after each re-anchor, and the
+        // display would sit on a stale number for that fraction every time.
+        $app->addScriptInline(<<<JS
+            (function () {
+                var TIMER_ID = '{$timerId}', SECONDS_ATTR = '{$secondsAttr}';
+                var base = null, since = 0;
+
+                function clock(seconds) {
+                    return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
+                }
+
+                setInterval(function () {
+                    var el = document.getElementById(TIMER_ID);
+                    // No timer on screen (start / results / explore): forget the
+                    // anchor so the next game starts from its own figure.
+                    if (!el) { base = null; return; }
+
+                    var seconds = parseInt(el.getAttribute(SECONDS_ATTR), 10);
+                    if (isNaN(seconds)) return;
+                    if (seconds !== base) { base = seconds; since = Date.now(); }
+
+                    var shown = base + Math.floor((Date.now() - since) / 1000);
+                    var text = clock(shown);
+                    if (el.textContent !== text) el.textContent = text;
+                }, 250);
+            })();
             JS);
 
         // Locations mode: Leaflet + a world-country GeoJSON overlay. The Leaflet

@@ -37,9 +37,11 @@ use Samples\FlagQuiz\Screens\StartScreen;
  * screens; on `lg`+ the shell is a fixed viewport and the flag grid scrolls
  * inside it.
  *
- * Server round-trip adaptations: the timer is derived from a start timestamp on
- * each render rather than ticking client-side, and a correct guess advances on
- * Enter (there is no client-side auto-advance).
+ * Server round-trip adaptations: the timer's value comes from a start timestamp
+ * on each render — the server stays the authority on how long the game has run
+ * — and a small client script ticks the displayed seconds between renders, so
+ * the clock keeps moving while nothing is being sent. A correct guess advances
+ * on Enter (there is no client-side auto-advance).
  */
 class FlagQuiz extends Component
 {
@@ -355,11 +357,6 @@ class FlagQuiz extends Component
         return Country::all()[$this->order[$this->index] ?? 0];
     }
 
-    private function fmtTime(int $seconds): string
-    {
-        return intdiv($seconds, 60) . ':' . str_pad((string)($seconds % 60), 2, '0', STR_PAD_LEFT);
-    }
-
     /** How many order positions have been decided (not still pending). */
     private function answeredCount(): int
     {
@@ -427,7 +424,7 @@ class FlagQuiz extends Component
     private function buildPlay(int $total, int $answered): UIElement
     {
         $score = $answered > 0 ? (int)round($this->countStatus(Answer::Correct) / $answered * 100) : 0;
-        $time = $this->fmtTime(time() - $this->startTime);
+        $time = Duration::since($this->startTime);
 
         $right = $this->countHistory(Answer::Correct);
         $wrong = $this->countHistory(Answer::Wrong);
@@ -456,7 +453,7 @@ class FlagQuiz extends Component
             );
     }
 
-    private function buildLeftPanel(int $answered, int $total, int $score, int $right, int $wrong, string $time, bool $showGrid): UIElement
+    private function buildLeftPanel(int $answered, int $total, int $score, int $right, int $wrong, Duration $time, bool $showGrid): UIElement
     {
         $children = [
             new ScoreBar($answered, $total, $score, $right, $wrong, $time, array_slice($this->history, -5)),
@@ -498,7 +495,7 @@ class FlagQuiz extends Component
     private function buildPlayLocation(int $total, int $answered): UIElement
     {
         $score = $answered > 0 ? (int)round($this->countStatus(Answer::Correct) / $answered * 100) : 0;
-        $time = $this->fmtTime(time() - $this->startTime);
+        $time = Duration::since($this->startTime);
         $right = $this->countHistory(Answer::Correct);
         $wrong = $this->countHistory(Answer::Wrong);
 
@@ -693,7 +690,7 @@ class FlagQuiz extends Component
             $correct,
             $total,
             $accuracy,
-            $this->fmtTime($this->elapsed),
+            (new Duration($this->elapsed))->clock(),
             $missed,
             fn() => $this->startGame(),
             fn() => $this->phase = GamePhase::Start,
