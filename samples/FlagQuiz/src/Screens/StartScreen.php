@@ -57,22 +57,58 @@ class StartScreen extends Component
 
     protected function build(): VNode
     {
-        // One single scrolling column: every section is just a stacked row, the
-        // Start button included. No pinned footer or vertical centering layered
-        // over the content. Roomier padding from the sm breakpoint up.
+        // Backdrop + content as two layers: the flag field is a real image
+        // element behind the stack (added before primary(), so it paints
+        // underneath), cropped to fill whatever shape the screen is. The
+        // scrolling column is the primary layer and sizes the stack.
+        return UI::layers()
+            ->grow()
+            ->minHeight(Unit::em(0))
+            ->layer(
+                UI::image('/assets/images/flags-background-soft.png')
+                    ->width(Unit::full())
+                    ->height(Unit::full())
+                    ->objectCover()
+                    ->objectCenter(),
+            )
+            ->primary($this->page());
+    }
+
+    /**
+     * One single scrolling column: every section is just a stacked row, the
+     * Start button included. No pinned footer or vertical centering layered
+     * over the content. Roomier padding from the sm breakpoint up.
+     */
+    private function page(): UIElement
+    {
         return UI::column()
             ->grow()
             ->minHeight(Unit::em(0))
+            ->height(Unit::full())
             ->scrollableY()
             ->alignCenter()
             ->padding(Unit::px(24))
             ->padding(Unit::px(40), Pseudo::sm())
+            // Positioned, so it stacks above the backdrop layer rather than
+            // under it — an absolute sibling paints over a static one.
+            ->relative()
             ->content(
+                // The choices sit on their own white panel: over a field of
+                // flags, headline and labels need a plain ground of their own
+                // to read against, and the panel edge is what separates the
+                // thing you interact with from the picture behind it.
                 UI::column()
                     ->width(Unit::full())
                     ->maxWidth(Unit::px(460))
                     ->alignCenter()
                     ->gap(Unit::px(24))
+                    ->background(Palette::white())
+                    ->bordered()
+                    ->borderColor(Palette::border())
+                    ->rounded(Unit::px(20))
+                    ->padding(Unit::px(24))
+                    ->padding(Unit::px(32), Pseudo::sm())
+                    ->shadow(Shadow::Large)
                     ->content(
                         UI::column()
                             ->alignCenter()
