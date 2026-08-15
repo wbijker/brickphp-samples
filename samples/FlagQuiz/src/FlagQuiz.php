@@ -651,7 +651,6 @@ class FlagQuiz extends Component
                                     fn(string $iso) => $this->exploreSelect($iso),
                                     labels: true,
                                     autoZoom: $this->autoZoom,
-                                    flagFills: true,
                                 ),
                             ),
                     ),

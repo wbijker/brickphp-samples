@@ -9,7 +9,6 @@ use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 use Samples\FlagQuiz\Country;
 use Samples\News\Leaflet;
-use Samples\News\LeafletImageFill;
 
 /**
  * The Leaflet world map for Locations mode. Built on the shared {@see Leaflet}
@@ -42,36 +41,11 @@ class WorldMap extends Component
     private const TARGET_STYLE  = ['color' => '#2563eb', 'weight' => 2.5, 'fillColor' => '#93c5fd', 'fillOpacity' => 0.5];
 
     /**
-     * Outline + focus ring for a country wearing its flag. Full opacity — the
-     * flag is the content here, not a tint over the basemap.
-     */
-    private const FLAG_STYLE     = ['color' => '#475569', 'weight' => 0.5, 'fillOpacity' => 1];
-    private const FLAG_SEL_STYLE = ['color' => '#0f172a', 'weight' => 3,   'fillOpacity' => 1];
-
-    /**
-     * Height of one flag in the tiled fill, in screen pixels. Big enough to
-     * read a flag at a glance, small enough that a country the size of France
-     * still shows several rather than a crop of one.
-     */
-    private const FLAG_TILE = 22;
-
-    /**
-     * Breathing room between neighbouring flags, and the colour behind them.
-     * Without a gap, striped flags run into their own copies and a country
-     * reads as one banded field; the gap makes each copy a flag again. The
-     * backing is near-white, so the colour on the map is the flags' own and
-     * the gaps read as paper between them.
-     */
-    private const FLAG_GAP = 5;
-    private const FLAG_BACKDROP = '#f7fafc';
-
-    /**
      * @param string[] $greens ISO-2 codes answered correctly
      * @param string[] $reds   ISO-2 codes answered wrong
      * @param Closure  $onPick fn(string $iso): void
      * @param bool     $labels show each country's flag + name on the map (Explore)
      * @param bool     $autoZoom zoom the map to the target country on each render
-     * @param bool     $flagFills fill every country with its own flag (Explore)
      */
     public function __construct(
         private string $targetIso,
@@ -80,7 +54,6 @@ class WorldMap extends Component
         private Closure $onPick,
         private bool $labels = false,
         private bool $autoZoom = true,
-        private bool $flagFills = false,
     ) {}
 
     protected function deleted(): void
@@ -103,15 +76,17 @@ class WorldMap extends Component
                 // Draw exactly the quiz catalogue and nothing else, so the map
                 // holds the same countries the flag quiz asks about.
                 'ids' => array_map(fn(Country $c) => $c->code, Country::all()),
-                // Explore is the mode that shows permanent labels, and a label
-                // sits on the first of its country's shapes. Split into one
-                // shape per landmass, biggest first, and each label lands on
-                // the mainland — undivided, the United States is one shape
-                // reaching Alaska and its label sits out there.
-                'split' => $this->flagFills,
+                // A label sits on the first of its country's shapes. Split into
+                // one shape per landmass, biggest first, and each label lands
+                // on the mainland — undivided, the United States is one shape
+                // reaching Alaska and its label sits out there. Only worth the
+                // extra layers where labels actually show.
+                'split' => $this->labels,
                 'defaultStyle' => self::DEFAULT_STYLE,
-                // Compact flag + name pill; styled by .leaflet-tooltip.fq-label.
-                'tooltipTemplate' => '<img src="https://flagcdn.com/w20/{id}.png" alt=""><span>{name}</span>',
+                // Flag + name pill; styled by .leaflet-tooltip.fq-label. The
+                // w40 flag is twice the size it's drawn at, so it stays sharp
+                // on a retina screen.
+                'tooltipTemplate' => '<img src="https://flagcdn.com/w40/{id}.png" alt=""><span>{name}</span>',
                 'tooltipOptions' => [
                     'permanent' => true, 'direction' => 'center',
                     'className' => 'fq-label', 'interactive' => false, 'opacity' => 1,
@@ -121,7 +96,7 @@ class WorldMap extends Component
         // Push this render's colouring. Precedence green > red > target: apply
         // target first, then reds, then greens last so a correct/wrong answer
         // keeps its colour.
-        $overrides = $this->flagFills ? $this->buildFlagFills($map) : [$this->targetIso => self::TARGET_STYLE];
+        $overrides = [$this->targetIso => self::TARGET_STYLE];
         foreach ($this->reds as $iso) {
             $overrides[$iso] = self::RED_STYLE;
         }
@@ -142,39 +117,5 @@ class WorldMap extends Component
         }
 
         return $map;
-    }
-
-    /**
-     * Dress every country in its actual flag: the flag tiles across the
-     * country, at its own proportions, clipped to the real outline. The focused
-     * country keeps its flag and gains a dark ring, so the highlight reads
-     * without hiding the thing the mode exists to show.
-     *
-     * Tiling rather than one stretched copy is what keeps the flags looking
-     * like flags — a country is never the shape of one, so fitting a single
-     * copy to the outline can only distort it. Small countries hold a copy or
-     * two, Russia holds hundreds, and every one is the right shape.
-     *
-     * @return array<string, array<string, mixed>> feature id → style
-     */
-    private function buildFlagFills(Leaflet $map): array
-    {
-        $fills = [];
-        $overrides = [];
-        foreach (Country::all() as $country) {
-            $fill = new LeafletImageFill(
-                $country->code,
-                $country->thumbUrl(),
-                tile: self::FLAG_TILE,
-                gap: self::FLAG_GAP,
-                background: self::FLAG_BACKDROP,
-            );
-            $fills[] = $fill;
-            $style = $country->code === $this->targetIso ? self::FLAG_SEL_STYLE : self::FLAG_STYLE;
-            $overrides[$country->code] = $style + ['fillColor' => $fill->fill()];
-        }
-        $map->imageFills($fills);
-
-        return $overrides;
     }
 }

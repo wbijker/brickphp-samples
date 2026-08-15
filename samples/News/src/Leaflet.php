@@ -74,9 +74,6 @@ class Leaflet extends StatelessComponent
     /** @var array{url:string,opts:array<string,mixed>}|null GeoJSON overlay, built once in created(). */
     private ?array $geoJson = null;
 
-    /** @var LeafletImageFill[] Image fills features may reference, defined once in created(). */
-    private array $imageFills = [];
-
     /**
      * Decorative `addMarker` / `addCircle` / `addPolygon` / `addPopup`
      * calls buffer their rendered JS-expression strings here. The
@@ -207,21 +204,6 @@ class Leaflet extends StatelessComponent
             $opts['dispatchId'] = $this->key;
         }
         $this->geoJson = ['url' => $url, 'opts' => $opts];
-        return $this;
-    }
-
-    /**
-     * Declare the image fills this map's features may use — see
-     * {@see LeafletImageFill}. Configuration, not per-render state: a fill's
-     * image doesn't change, so the (potentially large) set is emitted once in
-     * `created()` alongside the layer, and each render's
-     * {@see styleFeatures()} only names the ones it wants.
-     *
-     * @param LeafletImageFill[] $fills
-     */
-    public function imageFills(array $fills): self
-    {
-        $this->imageFills = $fills;
         return $this;
     }
 
@@ -390,16 +372,6 @@ class Leaflet extends StatelessComponent
             Js::invoke(Js::obj("map", 'setView'), $this->initialCoords ?? [0, 0], $this->initialZoom),
         ];
 
-        // Fill definitions first, so the layer's very first paint can already
-        // reference them.
-        if ($this->imageFills !== []) {
-            $lines[] = Js::invoke(
-                Js::obj('BrickLeaflet', 'defineFills'),
-                Js::str($this->key),
-                $this->imageFills,
-            );
-        }
-
         // GeoJSON overlay (built once): hand the config to the runtime, which
         // fetches, draws the features and wires their clicks.
         if ($this->geoJson !== null) {
@@ -553,7 +525,6 @@ class Leaflet extends StatelessComponent
         window.BrickLeaflet = (function () {
             var state = {};   // mapKey -> feature state
             var cache = {};   // url    -> parsed GeoJSON (shared across rebuilds)
-            var SVG_NS = 'http://www.w3.org/2000/svg';
 
             function ensure(key) {
                 return state[key] || (state[key] = {
@@ -561,8 +532,7 @@ class Leaflet extends StatelessComponent
                     styles: {}, byId: {}, names: {},
                     event: '', dispatchId: key,
                     template: '', tooltipOpts: { permanent: true, direction: 'center' },
-                    tooltips: false, fit: null, fittedId: null, loaded: false,
-                    fills: [], fillsSig: '', fillsDrawn: null
+                    tooltips: false, fit: null, fittedId: null, loaded: false
                 });
             }
 
@@ -636,88 +606,6 @@ class Leaflet extends StatelessComponent
                 });
             }
 
-            // One image fill: a tile of the picture, repeated across whatever
-            // shape references it. userSpaceOnUse (rather than sizing the tile
-            // to each shape's bounding box) is what keeps the picture out of
-            // the shape's proportions — the tile is a fixed number of screen
-            // pixels, so it reads the same everywhere and a bigger shape just
-            // holds more copies.
-            function imagePattern(def) {
-                var pattern = document.createElementNS(SVG_NS, 'pattern');
-                var image = document.createElementNS(SVG_NS, 'image');
-                var height = def.tile || 24;
-                var gap = def.gap || 0;
-                var backdrop = null;
-
-                pattern.setAttribute('id', 'brick-fill-' + def.id);
-                pattern.setAttribute('patternUnits', 'userSpaceOnUse');
-
-                // The gap is padding around the picture: half of it on each
-                // side, so a copy sits a full gap away from its neighbours.
-                // Anything painted behind has to cover the tile, gap included.
-                if (def.background) {
-                    backdrop = document.createElementNS(SVG_NS, 'rect');
-                    backdrop.setAttribute('x', '0');
-                    backdrop.setAttribute('y', '0');
-                    backdrop.setAttribute('fill', def.background);
-                    pattern.appendChild(backdrop);
-                }
-                image.setAttribute('href', def.url);
-                image.setAttribute('x', gap / 2);
-                image.setAttribute('y', gap / 2);
-                image.setAttribute('preserveAspectRatio', 'none');
-                pattern.appendChild(image);
-
-                function resize(width) {
-                    pattern.setAttribute('width', width + gap);
-                    pattern.setAttribute('height', height + gap);
-                    image.setAttribute('width', width);
-                    image.setAttribute('height', height);
-                    if (backdrop) {
-                        backdrop.setAttribute('width', width + gap);
-                        backdrop.setAttribute('height', height + gap);
-                    }
-                }
-
-                // Start on 3:2 — the common case — then correct once the real
-                // proportions are known. Pictures vary (among flags alone,
-                // Switzerland is square and Qatar nearly 3:1), and only the
-                // bitmap itself can say. The decode comes from cache, since the
-                // pattern is already fetching the same URL.
-                resize(Math.round(height * 1.5));
-                var probe = new Image();
-                probe.onload = function () {
-                    if (probe.naturalHeight) {
-                        resize(Math.round(height * probe.naturalWidth / probe.naturalHeight));
-                    }
-                };
-                probe.src = def.url;
-
-                return pattern;
-            }
-
-            // Park the patterns in a <defs> inside the map's own overlay <svg>,
-            // so a feature style can name one as fillColor: url(#brick-fill-x).
-            // Rebuilt only when the definitions actually change — otherwise
-            // every re-render would drop and refetch every image.
-            function applyFills(key) {
-                var st = state[key], map = window.leafLet[key];
-                if (!st || !map || !st.fills.length) return;
-                var pane = map.getPane('overlayPane');
-                var svg = pane && pane.querySelector('svg');
-                if (!svg) return;
-                var defs = svg.querySelector('defs.brick-fills');
-                if (defs && st.fillsDrawn === st.fillsSig) return;
-                if (!defs) {
-                    defs = document.createElementNS(SVG_NS, 'defs');
-                    defs.setAttribute('class', 'brick-fills');
-                    svg.insertBefore(defs, svg.firstChild);
-                }
-                while (defs.firstChild) defs.removeChild(defs.firstChild);
-                st.fills.forEach(function (def) { defs.appendChild(imagePattern(def)); });
-                st.fillsDrawn = st.fillsSig;
-            }
-
             // Bounds covering every feature that shares an id.
             function boundsOf(layers) {
                 var b = layers[0].getBounds();
@@ -730,8 +618,6 @@ class Leaflet extends StatelessComponent
             function apply(key) {
                 var st = state[key], map = window.leafLet[key];
                 if (!st || !map || !st.loaded) return;
-                // Patterns first: a style naming one must find it defined.
-                applyFills(key);
                 Object.keys(st.byId).forEach(function (id) {
                     var style = st.styles[id] || st.defaultStyle;
                     st.byId[id].forEach(function (layer) { layer.setStyle(style); });
@@ -793,12 +679,6 @@ class Leaflet extends StatelessComponent
                     else fetch(url).then(function (r) { return r.json(); }).then(function (geo) {
                         cache[url] = geo; buildLayer(key, geo);
                     });
-                },
-                defineFills: function (key, defs) {
-                    var st = ensure(key);
-                    st.fills = defs || [];
-                    st.fillsSig = JSON.stringify(st.fills);
-                    apply(key);
                 },
                 styleFeatures: function (key, overrides) {
                     ensure(key).styles = overrides || {};
