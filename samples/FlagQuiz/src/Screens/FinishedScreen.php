@@ -23,8 +23,9 @@ class FinishedScreen extends Component
 {
     /**
      * @param Country[] $missed
-     * @param Closure $onRestart fn(): void
-     * @param Closure $onBack    fn(): void
+     * @param Closure $onRestart     fn(): void
+     * @param Closure $onBack        fn(): void
+     * @param Closure $onRetryMissed fn(): void — replay just {@see $missed}
      */
     public function __construct(
         private int $correct,
@@ -34,6 +35,7 @@ class FinishedScreen extends Component
         private array $missed,
         private Closure $onRestart,
         private Closure $onBack,
+        private Closure $onRetryMissed,
     ) {}
 
     protected function build(): VNode
@@ -145,8 +147,28 @@ class FinishedScreen extends Component
             ->maxWidth(Unit::px(780))
             ->gap(Unit::px(11))
             ->content(
-                UI::text('Flags to review — ' . count($this->missed))
-                    ->fontSize(FontSize::ExtraSmall)->uppercase()->color(Palette::labelMuted()),
+                // The action belongs to this section, not to the pair of
+                // buttons below: it plays the flags listed right here, and
+                // reads as a caption on them rather than a third way to
+                // start a game.
+                UI::row()
+                    ->alignMiddle()
+                    ->alignBetween()
+                    ->gap(Unit::px(12))
+                    ->content(
+                        UI::text('Flags to review — ' . count($this->missed))
+                            ->fontSize(FontSize::ExtraSmall)->uppercase()->color(Palette::labelMuted()),
+                        UI::button('Practise these ' . count($this->missed) . ' →')
+                            ->noShrink()
+                            ->borderNone()
+                            ->background(Palette::transparent())
+                            ->color(Palette::blue())
+                            ->weight(FontWeight::SemiBold)
+                            ->fontSize(FontSize::Small)
+                            ->padding(Unit::none())
+                            ->clickable()
+                            ->onClick(fn() => ($this->onRetryMissed)()),
+                    ),
                 UI::row()
                     ->wrap()
                     ->gap(Unit::px(9))

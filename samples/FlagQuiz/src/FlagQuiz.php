@@ -144,26 +144,69 @@ class FlagQuiz extends Component
         }
 
         // Restrict the game to the chosen continents.
-        $this->order = $this->selectedCountryIndexes();
+        $this->beginRound($this->selectedCountryIndexes());
+    }
+
+    /**
+     * Play the flags this game got wrong, and nothing else — the shortest
+     * route from "here is what you missed" to practising exactly that. The
+     * settings, mode and ordering all carry over; only the set narrows.
+     */
+    private function retryMissed(): void
+    {
+        $missed = $this->missedIndexes();
+        if ($missed === []) {
+            return;
+        }
+        $this->beginRound($missed);
+    }
+
+    /**
+     * Start a round over these countries: order them, clear every per-game
+     * counter, restart the clock. The one place a game begins, so a retry
+     * can't drift from a fresh start.
+     *
+     * @param int[] $indexes indices into {@see Country::all()}
+     */
+    private function beginRound(array $indexes): void
+    {
         // Always shuffle first; for the grouped orderings a stable sort by the
         // similarity key (stable since PHP 8.0) then clusters lookalikes while
         // keeping their within-group order random.
-        shuffle($this->order);
+        shuffle($indexes);
         if ($this->flagSort !== FlagSort::Random) {
             $all = Country::all();
             usort(
-                $this->order,
+                $indexes,
                 fn(int $a, int $b) => $this->flagSort->keyFor($all[$a]) <=> $this->flagSort->keyFor($all[$b]),
             );
         }
-        $n = count($this->order);
+        $this->order = $indexes;
         $this->index = 0;
-        $this->status = array_fill(0, $n, Answer::Pending);
+        $this->status = array_fill(0, count($indexes), Answer::Pending);
         $this->wrong = false;
         $this->history = [];
         $this->elapsed = 0;
         $this->startTime = time();
         $this->phase = GamePhase::Playing;
+    }
+
+    /**
+     * The flags actually got wrong or given up on — not the ones never
+     * reached, which are still pending when a game is finished early.
+     *
+     * @return int[] indices into {@see Country::all()}
+     */
+    private function missedIndexes(): array
+    {
+        $missed = [];
+        foreach ($this->order as $pos => $countryIdx) {
+            $status = $this->status[$pos] ?? Answer::Pending;
+            if ($status === Answer::Wrong || $status === Answer::Skipped) {
+                $missed[] = $countryIdx;
+            }
+        }
+        return $missed;
     }
 
     /**
@@ -676,15 +719,7 @@ class FlagQuiz extends Component
         // diluted by flags never reached).
         $accuracy = $answered > 0 ? (int)round($correct / $answered * 100) : 0;
 
-        // The flags actually got wrong or gave up on — not the ones never
-        // reached (still pending when finishing early).
-        $missed = [];
-        foreach ($this->order as $pos => $countryIdx) {
-            $status = $this->status[$pos] ?? Answer::Pending;
-            if ($status === Answer::Wrong || $status === Answer::Skipped) {
-                $missed[] = $all[$countryIdx];
-            }
-        }
+        $missed = array_map(fn(int $i) => $all[$i], $this->missedIndexes());
 
         return new FinishedScreen(
             $correct,
@@ -694,6 +729,7 @@ class FlagQuiz extends Component
             $missed,
             fn() => $this->startGame(),
             fn() => $this->phase = GamePhase::Start,
+            fn() => $this->retryMissed(),
         );
     }
 }
