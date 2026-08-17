@@ -3,6 +3,7 @@
 namespace Samples\FlagQuiz\Components;
 
 use Closure;
+use BrickPHP\Events\Key;
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
 use BrickPHP\UI\Pseudo;
@@ -49,15 +50,15 @@ class GuessInput extends Component
         }
 
         return UI::column()
+            // Escape passes on the current flag from anywhere on the screen —
+            // a document-level handler, because the player may have clicked
+            // away into the grid or the map. preventDefault so the key is ours
+            // alone. Only Escape ever leaves the browser; every other keystroke
+            // is filtered on the client and never becomes a request.
+            ->onGlobalKeyDown(fn() => ($this->onNext)(), [Key::Escape], preventDefault: true)
             ->content(
                 $this->buildInput(),
                 $this->buildHint(),
-                // Escape/Tab click this (see FlagQuizApp) so a "pass" only
-                // reaches the server on those keys — no per-keystroke traffic.
-                UI::button('Next')
-                    ->attr('id', 'fq-next')
-                    ->hidden()
-                    ->onClick(fn() => ($this->onNext)()),
             );
     }
 
@@ -70,6 +71,10 @@ class GuessInput extends Component
             ->key('fq-input')
             ->attr('id', 'fq-input')
             ->autofocus()
+            // Tab passes too, but only while typing — so it binds to the field
+            // itself rather than the document, and preventDefault keeps focus
+            // here instead of moving it to the next control.
+            ->onKeyDown(fn() => ($this->onNext)(), [Key::Tab], preventDefault: true)
             ->bind($this->input)
             ->width(Unit::full())
             ->padding(x: Unit::px(20), y: Unit::px(18))

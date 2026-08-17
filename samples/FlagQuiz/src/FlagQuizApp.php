@@ -39,30 +39,22 @@ class FlagQuizApp extends App
 
         // A quick scale "pop" used to flag a changed value (the right / wrong
         // tallies). Re-keying the element on change restarts the animation.
+        //
+        // Still CSS because the UI layer has no keyframes: it offers transforms
+        // (scale/rotate) and transitions (animated(), transitionTransform()),
+        // and a transition needs two states to move between — this fires on a
+        // node that has just been created, with no previous state to leave.
+        // A `keyframes()` helper on UIElement would retire this block. The rule
+        // carried `display: inline-block` for years to no effect: the element
+        // is a flex item, and flex items are blockified whatever they ask for.
         $app->addStyleInline(<<<'CSS'
             @keyframes fq-pop {
                 0%   { transform: scale(1); }
                 30%  { transform: scale(1.5); }
                 100% { transform: scale(1); }
             }
-            .fq-pop { display: inline-block; animation: fq-pop .45s ease; }
+            .fq-pop { animation: fq-pop .45s ease; }
             CSS);
-
-        // Keyboard is handled on the client; only Enter and the pass keys reach
-        // the server. Enter already submits via the field's change event, so
-        // typing never round-trips. Escape (anywhere) and Tab (while typing in
-        // the input) click the hidden "next" button — a server request fires
-        // only on those keys, never per keystroke.
-        $app->addScriptInline(<<<'JS'
-            document.addEventListener('keydown', function (e) {
-                if (e.key !== 'Escape' && e.key !== 'Tab') return;
-                var next = document.getElementById('fq-next');
-                if (!next) return;
-                if (e.key === 'Tab' && !(document.activeElement && document.activeElement.tagName === 'INPUT')) return;
-                e.preventDefault();
-                next.click();
-            });
-            JS);
 
         // The elapsed-time cell only changes when something is sent to the
         // server, which during a quiz can be many seconds apart — long enough
@@ -119,6 +111,12 @@ class FlagQuizApp extends App
         // squarer it was (Switzerland lost 8 of its 26 pixels, Nepal more).
         // max-content measures what's actually inside, and flex: none stops the
         // parts giving ground, so every pill is the width of its own contents.
+        //
+        // This one cannot become constructs: the nodes are Leaflet's own. The
+        // runtime builds each tooltip by parsing an HTML template string into
+        // the map's tooltip pane, so no UIElement ever exists to carry the
+        // styling, and the rules have to reach the elements by selector —
+        // including `.leaflet-tooltip::before`, the library's own arrow.
         $app->addStyleInline(<<<'CSS'
             .leaflet-tooltip.fq-label {
                 display: flex; align-items: center; gap: 6px;

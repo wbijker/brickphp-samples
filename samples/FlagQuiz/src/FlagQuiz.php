@@ -2,7 +2,7 @@
 
 namespace Samples\FlagQuiz;
 
-use BrickPHP\Js\Js;
+use BrickPHP\Js\Dom;
 use BrickPHP\UI\Direction;
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
@@ -200,7 +200,7 @@ class FlagQuiz extends Component
         if ($pos !== null && ($this->status[$pos] ?? Answer::Pending) === Answer::Pending) {
             $this->index = $pos;
             $this->wrong = false;
-            Js::run("var i=document.getElementById('fq-input'); if (i) { i.focus(); }");
+            Dom::focus('fq-input');
         }
     }
 
@@ -349,7 +349,7 @@ class FlagQuiz extends Component
         $this->wrong = false;
         // Jumping moved focus to the clicked flag — return it to the input
         // (runs after the DOM patch is applied).
-        Js::run("var i=document.getElementById('fq-input'); if (i) { i.focus(); }");
+        Dom::focus('fq-input');
     }
 
     private function current(): Country
