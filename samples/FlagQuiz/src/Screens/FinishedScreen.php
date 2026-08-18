@@ -3,6 +3,7 @@
 namespace Samples\FlagQuiz\Screens;
 
 use Closure;
+use BrickPHP\UI\Color;
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
 use BrickPHP\UI\Pseudo;
@@ -12,6 +13,8 @@ use BrickPHP\UI\UIElement;
 use BrickPHP\UI\Unit;
 use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
+use Samples\FlagQuiz\DiffKind;
+use Samples\FlagQuiz\GuessDiff;
 use Samples\FlagQuiz\MissedFlag;
 use Samples\FlagQuiz\Palette;
 
@@ -127,7 +130,8 @@ class FinishedScreen extends Component
 
     /**
      * A review chip's text: the right answer, and under it what the player
-     * actually typed, struck through so the pair reads as "not this, that".
+     * typed — aligned against the answer by {@see GuessDiff}, so the letters
+     * they got carry no colour and only the edits between the two words do.
      * Flags they skipped without typing anything keep the single line.
      */
     private function buildChipLabel(MissedFlag $miss): UIElement
@@ -138,17 +142,53 @@ class FinishedScreen extends Component
             return $name;
         }
 
+        // Two chains rather than a conditional ->strikethrough() on a stored
+        // one: the CssExtractor only harvests classes it can see in a literal
+        // chain (see FlagQuiz::buildLeftPanel for the same dance).
+        // preserveWhitespace() on both — spaces are letters here too, and the
+        // run either side of one is a separate node, so the gap between words
+        // would otherwise collapse.
+        $letters = [];
+        foreach (GuessDiff::compare($miss->country->name, $miss->guess) as $part) {
+            if ($part->kind === DiffKind::Added) {
+                // Struck out as well as red: these are letters the player put
+                // there that the name has no room for, and the rule is what
+                // says "delete this" rather than merely "this is wrong".
+                $letters[] = UI::text($part->text)
+                    ->preserveWhitespace()
+                    ->strikethrough()
+                    ->fontSize(FontSize::Small)
+                    ->color($this->diffColor($part->kind));
+                continue;
+            }
+            $letters[] = UI::text($part->text)
+                ->preserveWhitespace()
+                ->fontSize(FontSize::Small)
+                ->color($this->diffColor($part->kind));
+        }
+
         return UI::column()
             ->gap(Unit::px(1))
             ->content(
                 $name,
                 // Same size as the name above it: the two are the pair being
                 // compared, and shrinking one made it read as a footnote.
-                UI::text($miss->guess)
-                    ->strikethrough()
-                    ->fontSize(FontSize::Small)
-                    ->color(Palette::red()),
+                UI::row()->wrap()->content(...$letters),
             );
+    }
+
+    /**
+     * Red for the letters they typed that the name does not have (struck
+     * through too, where it is rendered), green for the ones they left out,
+     * ink for the letters they got.
+     */
+    private function diffColor(DiffKind $kind): Color
+    {
+        return match ($kind) {
+            DiffKind::Added => Palette::red(),
+            DiffKind::Missing => Palette::green(),
+            DiffKind::Same => Palette::ink(),
+        };
     }
 
     private function buildMissed(): UIElement
