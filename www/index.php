@@ -2,8 +2,7 @@
 
 use App\Config;
 use BrickPHP\Brick;
-use BrickPHP\UI\CssExtractor;
-use Samples\Docs\DocsApp;
+use Samples\FlagQuiz\FlagQuizApp;
 
 require 'vendor/autoload.php';
 
@@ -19,23 +18,8 @@ if (PHP_SAPI === 'cli-server') {
     }
 }
 
-// /style.css — preflight reset stitched together with the utility rules
-// extracted by lex-scanning the News sample's PHP source. Preflight goes
-// first so app rules can override its defaults. Versioned via ?h=<styleVersion>
-// in the <link> tag; the browser keys its cache off the full URL so a fresh
-// hash forces a refetch.
-if (str_starts_with($_SERVER['REQUEST_URI'] ?? '', '/style.css')) {
-    header('Content-Type: text/css; charset=utf-8');
-    header('Cache-Control: public, max-age=31536000, immutable');
-    echo "/* ==========================================================================\n";
-    echo "   PREFLIGHT — browser reset (from preflight.css)\n";
-    echo "   ========================================================================== */\n\n";
-    echo file_get_contents(Brick::assetPath('preflight.css'));
-    echo "\n/* ==========================================================================\n";
-    echo "   APPLICATION — utility rules extracted from samples/News\n";
-    echo "   ========================================================================== */\n\n";
-    echo (new CssExtractor())->scan(__DIR__ . '/../samples/Docs');
-    exit;
-}
-
-Brick::run(DocsApp::class, new Config());
+// Styling: /style.css (the preflight reset) plus the app's utility rules are
+// handled by Brick::run — the utilities are collected from the actual render
+// and emitted inline, then kept current across patches via the POST response.
+// No static source scan.
+Brick::run(FlagQuizApp::class, new Config());

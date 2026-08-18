@@ -61,9 +61,19 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 
 WORKDIR /var/www/html
 
-# Regenerate the autoloader on every container start. `composer install` is
-# typically run on the host (macOS), which bakes host-absolute paths into
-# vendor/composer/autoload_static.php. Dumping again inside the container
-# rewrites those paths against the container's filesystem view
-# (/var/www/html, /var/www/brickphp, ...) before Apache starts serving.
-CMD composer dump-autoload --working-dir=/var/www/html && apache2-foreground
+# Reinstall dependencies on every container start. `composer install` is
+# typically run on the host (macOS), where path-repository packages are
+# symlinked relative to the host's directory nesting — e.g. ../brickphp
+# resolves to the sibling ~/projects/brickphp, so vendor/brickphp/brickphp
+# becomes a 4-levels-up symlink. That depth is wrong inside the container,
+# where www is mounted at /var/www/html and the framework at /var/www/brickphp
+# (only 3 levels up), so the host-generated link dangles and the autoloader
+# can't find BrickPHP\* classes.
+#
+# Running `composer install` here (not just `dump-autoload`, which leaves the
+# symlinks untouched) recreates every path-package symlink relative to the
+# container's filesystem view before Apache starts serving. The result is a
+# 3-levels-up link that is valid in BOTH the container and on the host. All
+# dependencies are path repos (packagist is disabled), so this is fully
+# offline and idempotent.
+CMD composer install --no-interaction --working-dir=/var/www/html && apache2-foreground
