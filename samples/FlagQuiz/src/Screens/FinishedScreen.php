@@ -31,6 +31,7 @@ class FinishedScreen extends Component
         private int $correct,
         private int $total,
         private int $accuracy,
+        private int $score,
         private string $time,
         private array $missed,
         private Closure $onRestart,
@@ -57,10 +58,10 @@ class FinishedScreen extends Component
                     $this->stat($this->accuracy . '%', 'Accuracy'),
                     $this->stat($this->time, 'Time'),
                     $this->stat((string)$this->correct, 'Correct'),
-                    // The tally the headline gives, in the row where the other
-                    // numbers are read side by side: right out of every flag
-                    // in the game, not just the ones reached (that's Accuracy).
-                    $this->stat($this->correct . ' / ' . $this->total, 'Score'),
+                    // Right out of every flag in the game, not just the ones
+                    // reached — that's Accuracy. The headline above already
+                    // gives the raw tally this is a percentage of.
+                    $this->stat($this->score . '%', 'Score'),
                 ),
         ];
 
@@ -141,9 +142,11 @@ class FinishedScreen extends Component
             ->gap(Unit::px(1))
             ->content(
                 $name,
+                // Same size as the name above it: the two are the pair being
+                // compared, and shrinking one made it read as a footnote.
                 UI::text($miss->guess)
                     ->strikethrough()
-                    ->fontSize(FontSize::ExtraSmall)
+                    ->fontSize(FontSize::Small)
                     ->color(Palette::red()),
             );
     }

@@ -744,11 +744,16 @@ class FlagQuiz extends Component
         // Accuracy over what was actually attempted (so an early "Done" isn't
         // diluted by flags never reached).
         $accuracy = $answered > 0 ? (int)round($correct / $answered * 100) : 0;
+        // Score is over every flag in the game, so calling it early counts the
+        // ones never reached against you — the difference from accuracy, which
+        // only weighs what was attempted.
+        $score = $total > 0 ? (int)round($correct / $total * 100) : 0;
 
         return new FinishedScreen(
             $correct,
             $total,
             $accuracy,
+            $score,
             (new Duration($this->elapsed))->clock(),
             $this->missedFlags(),
             fn() => $this->startGame(),
