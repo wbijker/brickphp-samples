@@ -189,6 +189,12 @@ class FlagQuiz extends Component
         $this->elapsed = 0;
         $this->startTime = time();
         $this->phase = GamePhase::Playing;
+        // Put the cursor in the answer field so the first flag can be typed
+        // straight away. The field's own autofocus() cannot do this: the
+        // browser only flushes autofocus candidates while the document loads,
+        // and this field is inserted by a patch long after that — so the
+        // attribute is silently ignored and focus stays on the Start button.
+        Dom::focus('fq-input');
     }
 
     /**

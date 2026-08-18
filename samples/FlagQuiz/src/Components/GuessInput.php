@@ -70,6 +70,14 @@ class GuessInput extends Component
             ->autocomplete('off')
             ->key('fq-input')
             ->attr('id', 'fq-input')
+            // Focus takes two mechanisms because the field arrives two ways,
+            // and neither covers the other. Reloading mid-game restores the
+            // session straight into Playing, so the field is in the document
+            // at load — autofocus() is what fires there, and only there: the
+            // browser flushes autofocus candidates while the document loads
+            // and ignores the attribute on anything patched in afterwards.
+            // Starting a round is exactly that later case, so FlagQuiz issues
+            // Dom::focus('fq-input') by hand (as it does after a jump).
             ->autofocus()
             // Tab passes too, but only while typing — so it binds to the field
             // itself rather than the document, and preventDefault keeps focus

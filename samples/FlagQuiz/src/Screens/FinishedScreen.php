@@ -57,6 +57,10 @@ class FinishedScreen extends Component
                     $this->stat($this->accuracy . '%', 'Accuracy'),
                     $this->stat($this->time, 'Time'),
                     $this->stat((string)$this->correct, 'Correct'),
+                    // The tally the headline gives, in the row where the other
+                    // numbers are read side by side: right out of every flag
+                    // in the game, not just the ones reached (that's Accuracy).
+                    $this->stat($this->correct . ' / ' . $this->total, 'Score'),
                 ),
         ];
 
