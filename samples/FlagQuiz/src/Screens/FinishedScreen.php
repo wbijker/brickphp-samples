@@ -12,7 +12,7 @@ use BrickPHP\UI\UIElement;
 use BrickPHP\UI\Unit;
 use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
-use Samples\FlagQuiz\Country;
+use Samples\FlagQuiz\MissedFlag;
 use Samples\FlagQuiz\Palette;
 
 /**
@@ -22,7 +22,7 @@ use Samples\FlagQuiz\Palette;
 class FinishedScreen extends Component
 {
     /**
-     * @param Country[] $missed
+     * @param MissedFlag[] $missed
      * @param Closure $onRestart     fn(): void
      * @param Closure $onBack        fn(): void
      * @param Closure $onRetryMissed fn(): void — replay just {@see $missed}
@@ -124,10 +124,34 @@ class FinishedScreen extends Component
             );
     }
 
+    /**
+     * A review chip's text: the right answer, and under it what the player
+     * actually typed, struck through so the pair reads as "not this, that".
+     * Flags they skipped without typing anything keep the single line.
+     */
+    private function buildChipLabel(MissedFlag $miss): UIElement
+    {
+        $name = UI::text($miss->country->name)->fontSize(FontSize::Small)->weight(FontWeight::Medium);
+
+        if ($miss->guess === '') {
+            return $name;
+        }
+
+        return UI::column()
+            ->gap(Unit::px(1))
+            ->content(
+                $name,
+                UI::text($miss->guess)
+                    ->strikethrough()
+                    ->fontSize(FontSize::ExtraSmall)
+                    ->color(Palette::red()),
+            );
+    }
+
     private function buildMissed(): UIElement
     {
         $chips = [];
-        foreach ($this->missed as $c) {
+        foreach ($this->missed as $miss) {
             $chips[] = UI::row()
                 ->alignMiddle()
                 ->gap(Unit::px(9))
@@ -137,12 +161,12 @@ class FinishedScreen extends Component
                 ->rounded(Unit::px(10))
                 ->padding(left: Unit::px(6), right: Unit::px(13), y: Unit::px(6))
                 ->content(
-                    UI::image($c->thumbUrl(), '')
+                    UI::image($miss->country->thumbUrl(), '')
                         ->width(Unit::px(32))
                         ->height(Unit::px(22))
                         ->objectContain()
                         ->rounded(Unit::px(3)),
-                    UI::text($c->name)->fontSize(FontSize::Small)->weight(FontWeight::Medium),
+                    $this->buildChipLabel($miss),
                 );
         }
 

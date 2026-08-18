@@ -87,6 +87,16 @@ class FlagQuiz extends Component
      * @var Answer[]
      */
     private array $history = [];
+    /**
+     * The last wrong thing typed at each order position, keyed by position —
+     * only positions that actually got a wrong guess appear. Kept so the
+     * results screen can show the player what they said. In lenient mode a
+     * flag can be guessed at several times; the latest wrong one wins, being
+     * where they were when they gave up.
+     *
+     * @var string[]
+     */
+    private array $wrongGuesses = [];
     private int $startTime = 0;
     private int $elapsed = 0;
 
@@ -112,6 +122,7 @@ class FlagQuiz extends Component
         $this->useState($this->status);
         $this->useState($this->wrong);
         $this->useState($this->history);
+        $this->useState($this->wrongGuesses);
         $this->useState($this->startTime);
         $this->useState($this->elapsed);
     }
@@ -154,11 +165,12 @@ class FlagQuiz extends Component
      */
     private function retryMissed(): void
     {
-        $missed = $this->missedIndexes();
+        $missed = $this->missedFlags();
         if ($missed === []) {
             return;
         }
-        $this->beginRound($missed);
+        // Resolved against the current order before beginRound() replaces it.
+        $this->beginRound(array_map(fn(MissedFlag $m) => $this->order[$m->pos], $missed));
     }
 
     /**
@@ -186,6 +198,7 @@ class FlagQuiz extends Component
         $this->status = array_fill(0, count($indexes), Answer::Pending);
         $this->wrong = false;
         $this->history = [];
+        $this->wrongGuesses = [];
         $this->elapsed = 0;
         $this->startTime = time();
         $this->phase = GamePhase::Playing;
@@ -199,17 +212,20 @@ class FlagQuiz extends Component
 
     /**
      * The flags actually got wrong or given up on — not the ones never
-     * reached, which are still pending when a game is finished early.
+     * reached, which are still pending when a game is finished early. Each
+     * carries whatever the player last typed for it, so the results screen
+     * and a retry both read from one walk of the order.
      *
-     * @return int[] indices into {@see Country::all()}
+     * @return MissedFlag[]
      */
-    private function missedIndexes(): array
+    private function missedFlags(): array
     {
+        $all = Country::all();
         $missed = [];
         foreach ($this->order as $pos => $countryIdx) {
             $status = $this->status[$pos] ?? Answer::Pending;
             if ($status === Answer::Wrong || $status === Answer::Skipped) {
-                $missed[] = $countryIdx;
+                $missed[] = new MissedFlag($pos, $all[$countryIdx], $this->wrongGuesses[$pos] ?? '');
             }
         }
         return $missed;
@@ -222,7 +238,12 @@ class FlagQuiz extends Component
      */
     private function handleGuess(string $value): void
     {
-        $this->judge($this->current()->matches($value));
+        $correct = $this->current()->matches($value);
+        // Recorded before judging, which may advance past this position.
+        if (!$correct && trim($value) !== '') {
+            $this->wrongGuesses[$this->index] = trim($value);
+        }
+        $this->judge($correct);
     }
 
     /**
@@ -718,21 +739,18 @@ class FlagQuiz extends Component
 
     private function buildFinished(int $total): VNode
     {
-        $all = Country::all();
         $correct = $this->countStatus(Answer::Correct);
         $answered = $this->answeredCount();
         // Accuracy over what was actually attempted (so an early "Done" isn't
         // diluted by flags never reached).
         $accuracy = $answered > 0 ? (int)round($correct / $answered * 100) : 0;
 
-        $missed = array_map(fn(int $i) => $all[$i], $this->missedIndexes());
-
         return new FinishedScreen(
             $correct,
             $total,
             $accuracy,
             (new Duration($this->elapsed))->clock(),
-            $missed,
+            $this->missedFlags(),
             fn() => $this->startGame(),
             fn() => $this->phase = GamePhase::Start,
             fn() => $this->retryMissed(),
