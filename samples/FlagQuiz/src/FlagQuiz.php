@@ -258,12 +258,11 @@ class FlagQuiz extends Component
     private function missedFlags(): array
     {
         $all = Country::all();
-        $kind = $this->quiz()->guessKind();
         $missed = [];
         foreach ($this->order as $pos => $countryIdx) {
             $status = $this->status[$pos] ?? Answer::Pending;
             if ($status === Answer::Wrong || $status === Answer::Skipped) {
-                $missed[] = new MissedFlag($pos, $all[$countryIdx], $this->wrongGuesses[$pos] ?? '', $kind);
+                $missed[] = new MissedFlag($pos, $all[$countryIdx], $this->wrongGuesses[$pos] ?? '');
             }
         }
         return $missed;

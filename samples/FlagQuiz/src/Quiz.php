@@ -56,12 +56,6 @@ final class Quiz
         return array_values(array_filter($this->sources, fn(Attribute $a) => $a !== Attribute::Location));
     }
 
-    /** How a wrong answer is recorded, which decides how it reads back. */
-    public function guessKind(): GuessKind
-    {
-        return $this->isTyped() ? GuessKind::Typed : GuessKind::Picked;
-    }
-
     /** The pairing in a line: "Flag + Capital → Map". */
     public function summary(): string
     {
