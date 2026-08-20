@@ -1028,7 +1028,15 @@ class FlagQuiz extends Component
                                 UI::image($selected->thumbUrl(), '')
                                     ->width(Unit::px(40))->height(Unit::px(27))->objectContain()
                                     ->rounded(Unit::px(4))->bordered()->borderColor(Palette::border()),
-                                UI::text($selected->name)->weight(FontWeight::SemiBold)->fontSize(FontSize::Large),
+                                // Name over capital: the country is the heading
+                                // and its capital the smaller line under it, so
+                                // the pair reads as one caption on the flag.
+                                UI::column()->gap(Unit::px(1))->content(
+                                    UI::text($selected->name)
+                                        ->weight(FontWeight::SemiBold)->fontSize(FontSize::Large),
+                                    UI::text($selected->capitalLabel())
+                                        ->fontSize(FontSize::Small)->color(Palette::subtle()),
+                                ),
                             )
                             : UI::text('Explore the world — pick a country to focus the map')
                                 ->fontSize(FontSize::Small)->color(Palette::subtle()),
