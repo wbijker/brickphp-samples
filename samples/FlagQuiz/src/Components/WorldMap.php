@@ -44,6 +44,15 @@ class WorldMap extends Component
     private const TARGET_STYLE  = ['color' => '#2563eb', 'weight' => 2.5, 'fillColor' => '#93c5fd', 'fillOpacity' => 0.5];
 
     /**
+     * Laid over whichever country the pointer is on, keeping its own colour
+     * underneath. Borders here are a hairline apart and half the map is one
+     * shade of pale, so without this there is no telling which shape a click
+     * would land on — least of all in Europe, where a wrong neighbour is a
+     * pixel away.
+     */
+    private const HOVER_STYLE   = ['color' => '#0f172a', 'weight' => 2, 'fillOpacity' => 0.9];
+
+    /**
      * @param string[] $greens ISO-2 codes answered correctly
      * @param string[] $reds   ISO-2 codes answered wrong
      * @param Closure  $onPick fn(string $iso): void
@@ -105,6 +114,7 @@ class WorldMap extends Component
                 // extra layers where labels actually show.
                 'split' => $this->labels,
                 'defaultStyle' => self::DEFAULT_STYLE,
+                'hoverStyle' => self::HOVER_STYLE,
                 // Flag, name and capital pill; styled by .leaflet-tooltip
                 // .fq-label. The w40 flag is twice the size it's drawn at, so
                 // it stays sharp on a retina screen.

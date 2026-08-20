@@ -214,6 +214,8 @@ class Leaflet extends StatelessComponent
      *                            its label, its bounds — follows each part
      *                            rather than the whole scattered set
      *   defaultStyle   object    base path style for every feature
+     *   hoverStyle     object    style laid over a feature while the pointer is
+     *                            on it — omit for a map that doesn't react
      *   tooltipTemplate string   label HTML, with `{id}` / `{name}` / `{sub}` placeholders
      *   subtitles      object    feature id → the text `{sub}` stands for, for
      *                            anything the GeoJSON itself doesn't carry
@@ -592,6 +594,7 @@ class Leaflet extends StatelessComponent
                 return state[key] || (state[key] = {
                     idProps: [], nameProps: [], defaultStyle: {}, ids: null, split: false,
                     styles: table(), byId: table(), names: table(), subs: table(),
+                    hoverStyle: null, hoveredId: '',
                     event: '', dispatchId: key,
                     template: '', tooltipOpts: { permanent: true, direction: 'center' },
                     tooltips: false, fit: null, fittedId: null, loaded: false,
@@ -749,13 +752,47 @@ class Leaflet extends StatelessComponent
 
             // Re-apply the desired state to a loaded map: recolour every feature,
             // sync labels, and zoom to the target once per id.
+            // The style a feature wears when nothing is happening to it.
+            function styleOf(st, id) {
+                return st.styles[id] || st.defaultStyle;
+            }
+
+            // b laid over a, without touching either.
+            function merged(a, b) {
+                var out = {};
+                Object.keys(a || {}).forEach(function (k) { out[k] = a[k]; });
+                Object.keys(b || {}).forEach(function (k) { out[k] = b[k]; });
+                return out;
+            }
+
+            // Lift a feature under the pointer, or set it back down. Every shape
+            // of a country lifts together — a country is one thing to point at
+            // however many islands it is drawn as — and the lifted one is
+            // brought to the front so its outline isn't hidden under the
+            // neighbours it shares a border with.
+            function setHover(key, id, on) {
+                var st = state[key];
+                if (!st || !st.hoverStyle || !st.byId[id]) return;
+                if (on) st.hoveredId = id;
+                else if (st.hoveredId === id) st.hoveredId = '';
+
+                var base = styleOf(st, id), style = on ? merged(base, st.hoverStyle) : base;
+                st.byId[id].forEach(function (layer) {
+                    layer.setStyle(style);
+                    if (on && layer.bringToFront) layer.bringToFront();
+                });
+            }
+
             function apply(key) {
                 var st = state[key], map = window.leafLet[key];
                 if (!st || !map || !st.loaded) return;
                 Object.keys(st.byId).forEach(function (id) {
-                    var style = st.styles[id] || st.defaultStyle;
+                    var style = styleOf(st, id);
                     st.byId[id].forEach(function (layer) { layer.setStyle(style); });
                 });
+                // A re-style paints over the feature under the pointer, which
+                // hasn't gone anywhere: put its highlight back.
+                if (st.hoveredId) setHover(key, st.hoveredId, true);
                 applyTooltips(key);
                 if (st.fit && st.byId[st.fit.id] && st.fit.id !== st.fittedId) {
                     try { map.fitBounds(boundsOf(st.byId[st.fit.id]), st.fit.opts); } catch (e) {}
@@ -785,6 +822,10 @@ class Leaflet extends StatelessComponent
                         if (st.event) {
                             layer.on('click', function () { featureTap(key, id); });
                         }
+                        if (st.hoverStyle) {
+                            layer.on('mouseover', function () { setHover(key, id, true); });
+                            layer.on('mouseout', function () { setHover(key, id, false); });
+                        }
                     }
                 }).addTo(map);
                 st.loaded = true;
@@ -808,6 +849,7 @@ class Leaflet extends StatelessComponent
                     st.dispatchId = opts.dispatchId || key;
                     st.template = opts.tooltipTemplate || '';
                     st.subs = table(opts.subtitles);
+                    st.hoverStyle = opts.hoverStyle || null;
                     if (opts.tooltipOptions) st.tooltipOpts = opts.tooltipOptions;
                     if (cache[url]) buildLayer(key, cache[url]);
                     else fetch(url).then(function (r) { return r.json(); }).then(function (geo) {
