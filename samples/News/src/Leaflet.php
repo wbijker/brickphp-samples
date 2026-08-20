@@ -632,6 +632,11 @@ class Leaflet extends StatelessComponent
                     st.dragged = Math.abs(p[0] - x) > DRAG_SLOP_PX
                         || Math.abs(p[1] - y) > DRAG_SLOP_PX;
                 }, true);
+                // Leaving the map is the one exit no feature reports, since the
+                // pointer never arrives anywhere else on it. mouseleave, not
+                // mouseout: mouseout bubbles up from every shape crossed on the
+                // way and would put the highlight out mid-journey.
+                el.addEventListener('mouseleave', function () { setHover(key, ''); });
             }
 
             // A feature was clicked. Report it only if the click was meant:
@@ -765,34 +770,46 @@ class Leaflet extends StatelessComponent
                 return out;
             }
 
-            // Lift a feature under the pointer, or set it back down. Every shape
-            // of a country lifts together — a country is one thing to point at
-            // however many islands it is drawn as — and the lifted one is
-            // brought to the front so its outline isn't hidden under the
-            // neighbours it shares a border with.
-            function setHover(key, id, on) {
-                var st = state[key];
-                if (!st || !st.hoverStyle || !st.byId[id]) return;
-                if (on) st.hoveredId = id;
-                else if (st.hoveredId === id) st.hoveredId = '';
-
-                var base = styleOf(st, id), style = on ? merged(base, st.hoverStyle) : base;
+            // Paint every shape of a feature — a country is one thing to point
+            // at however many islands it is drawn as.
+            function paint(st, id, style, toFront) {
+                if (!st.byId[id]) return;
                 st.byId[id].forEach(function (layer) {
                     layer.setStyle(style);
-                    if (on && layer.bringToFront) layer.bringToFront();
+                    if (toFront && layer.bringToFront) layer.bringToFront();
                 });
+            }
+
+            // Move the highlight to a feature, or to nothing. The pointer is on
+            // one country at a time, so this puts the last one back before
+            // lifting the next rather than waiting to be told it left: a
+            // mouseout can go missing — bringToFront() moves the shape out from
+            // under the pointer as it is lit, and a fast diagonal across a
+            // border can leave the pair out of order — and every one that goes
+            // missing would otherwise leave a country lit behind the pointer.
+            //
+            // The lifted one comes to the front so its outline isn't hidden
+            // under the neighbours it shares a border with.
+            function setHover(key, id) {
+                var st = state[key];
+                if (!st || !st.hoverStyle || st.hoveredId === id) return;
+
+                if (st.hoveredId) paint(st, st.hoveredId, styleOf(st, st.hoveredId));
+                st.hoveredId = st.byId[id] ? id : '';
+                if (st.hoveredId) paint(st, id, merged(styleOf(st, id), st.hoverStyle), true);
             }
 
             function apply(key) {
                 var st = state[key], map = window.leafLet[key];
                 if (!st || !map || !st.loaded) return;
                 Object.keys(st.byId).forEach(function (id) {
-                    var style = styleOf(st, id);
-                    st.byId[id].forEach(function (layer) { layer.setStyle(style); });
+                    paint(st, id, styleOf(st, id));
                 });
                 // A re-style paints over the feature under the pointer, which
                 // hasn't gone anywhere: put its highlight back.
-                if (st.hoveredId) setHover(key, st.hoveredId, true);
+                if (st.hoveredId) {
+                    paint(st, st.hoveredId, merged(styleOf(st, st.hoveredId), st.hoverStyle), true);
+                }
                 applyTooltips(key);
                 if (st.fit && st.byId[st.fit.id] && st.fit.id !== st.fittedId) {
                     try { map.fitBounds(boundsOf(st.byId[st.fit.id]), st.fit.opts); } catch (e) {}
@@ -803,7 +820,7 @@ class Leaflet extends StatelessComponent
             function buildLayer(key, geo) {
                 var st = ensure(key), map = window.leafLet[key];
                 if (!map) return;
-                if (st.event) watchGestures(key, map);
+                if (st.event || st.hoverStyle) watchGestures(key, map);
                 if (st.split) geo = explode(geo);
                 L.geoJSON(geo, {
                     // Unidentifiable features, and (when an allow-list is set)
@@ -823,8 +840,14 @@ class Leaflet extends StatelessComponent
                             layer.on('click', function () { featureTap(key, id); });
                         }
                         if (st.hoverStyle) {
-                            layer.on('mouseover', function () { setHover(key, id, true); });
-                            layer.on('mouseout', function () { setHover(key, id, false); });
+                            layer.on('mouseover', function () { setHover(key, id); });
+                            // Only if the pointer hasn't already moved on: a
+                            // late mouseout, arriving after the next country's
+                            // mouseover, is about a country that is no longer
+                            // the one being pointed at.
+                            layer.on('mouseout', function () {
+                                if (st.hoveredId === id) setHover(key, '');
+                            });
                         }
                     }
                 }).addTo(map);
