@@ -214,7 +214,9 @@ class Leaflet extends StatelessComponent
      *                            its label, its bounds — follows each part
      *                            rather than the whole scattered set
      *   defaultStyle   object    base path style for every feature
-     *   tooltipTemplate string   label HTML, with `{id}` / `{name}` placeholders
+     *   tooltipTemplate string   label HTML, with `{id}` / `{name}` / `{sub}` placeholders
+     *   subtitles      object    feature id → the text `{sub}` stands for, for
+     *                            anything the GeoJSON itself doesn't carry
      *   tooltipOptions object    Leaflet tooltip options (className, direction…)
      *
      * A feature click dispatches {@see EVENT_FEATURE} when a handler is set via
@@ -589,7 +591,7 @@ class Leaflet extends StatelessComponent
             function ensure(key) {
                 return state[key] || (state[key] = {
                     idProps: [], nameProps: [], defaultStyle: {}, ids: null, split: false,
-                    styles: table(), byId: table(), names: table(),
+                    styles: table(), byId: table(), names: table(), subs: table(),
                     event: '', dispatchId: key,
                     template: '', tooltipOpts: { permanent: true, direction: 'center' },
                     tooltips: false, fit: null, fittedId: null, loaded: false,
@@ -713,7 +715,10 @@ class Leaflet extends StatelessComponent
                 Object.keys(st.byId).forEach(function (id) {
                     var layer = st.byId[id][0], has = !!layer.getTooltip();
                     if (st.tooltips && !has) {
-                        var html = st.template.replace(/\{id\}/g, id).replace(/\{name\}/g, st.names[id] || '');
+                        var html = st.template
+                            .replace(/\{id\}/g, id)
+                            .replace(/\{name\}/g, st.names[id] || '')
+                            .replace(/\{sub\}/g, st.subs[id] || '');
                         layer.bindTooltip(html, st.tooltipOpts);
                     } else if (!st.tooltips && has) {
                         layer.unbindTooltip();
@@ -802,6 +807,7 @@ class Leaflet extends StatelessComponent
                     st.event = opts.event || '';
                     st.dispatchId = opts.dispatchId || key;
                     st.template = opts.tooltipTemplate || '';
+                    st.subs = table(opts.subtitles);
                     if (opts.tooltipOptions) st.tooltipOpts = opts.tooltipOptions;
                     if (cache[url]) buildLayer(key, cache[url]);
                     else fetch(url).then(function (r) { return r.json(); }).then(function (geo) {

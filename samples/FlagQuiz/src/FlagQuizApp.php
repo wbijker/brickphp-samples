@@ -132,6 +132,12 @@ class FlagQuizApp extends App
                 flex: none; width: 26px; height: 18px; object-fit: cover; border-radius: 2px;
             }
             .leaflet-tooltip.fq-label span { flex: none; overflow: visible; }
+            /* Country over capital, beside the flag: the country is what the
+               pill is for and the capital a quieter second line under it. */
+            .leaflet-tooltip.fq-label .fq-label-text { display: flex; flex-direction: column; }
+            .leaflet-tooltip.fq-label .fq-label-capital {
+                font-weight: 500; font-size: 11px; color: #78716c;
+            }
             CSS);
     }
 

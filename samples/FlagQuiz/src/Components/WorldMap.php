@@ -59,6 +59,20 @@ class WorldMap extends Component
         private bool $autoZoom = true,
     ) {}
 
+    /**
+     * Every country's capital, keyed by ISO-2 — the `{sub}` line of the labels.
+     *
+     * @return array<string,string>
+     */
+    private static function capitals(): array
+    {
+        $out = [];
+        foreach (Country::all() as $country) {
+            $out[$country->code] = $country->capitalLabel();
+        }
+        return $out;
+    }
+
     protected function deleted(): void
     {
         // The map screen unmounted (back to start / mode switch): tear the
@@ -91,10 +105,19 @@ class WorldMap extends Component
                 // extra layers where labels actually show.
                 'split' => $this->labels,
                 'defaultStyle' => self::DEFAULT_STYLE,
-                // Flag + name pill; styled by .leaflet-tooltip.fq-label. The
-                // w40 flag is twice the size it's drawn at, so it stays sharp
-                // on a retina screen.
-                'tooltipTemplate' => '<img src="https://flagcdn.com/w40/{id}.png" alt=""><span>{name}</span>',
+                // Flag, name and capital pill; styled by .leaflet-tooltip
+                // .fq-label. The w40 flag is twice the size it's drawn at, so
+                // it stays sharp on a retina screen.
+                'tooltipTemplate' => '<img src="https://flagcdn.com/w40/{id}.png" alt="">'
+                    . '<span class="fq-label-text">'
+                    . '<span class="fq-label-name">{name}</span>'
+                    . '<span class="fq-label-capital">{sub}</span>'
+                    . '</span>',
+                // Capitals come from the catalogue rather than the GeoJSON, and
+                // only where the labels are actually drawn: in a quiz that asks
+                // for a capital, shipping all 197 of them to the client would
+                // put the answers in the page.
+                'subtitles' => $this->labels ? self::capitals() : [],
                 'tooltipOptions' => [
                     'permanent' => true, 'direction' => 'center',
                     'className' => 'fq-label', 'interactive' => false, 'opacity' => 1,
