@@ -15,6 +15,7 @@ use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 use Samples\FlagQuiz\DiffKind;
 use Samples\FlagQuiz\GuessDiff;
+use Samples\FlagQuiz\GuessKind;
 use Samples\FlagQuiz\MissedFlag;
 use Samples\FlagQuiz\Palette;
 
@@ -140,6 +141,19 @@ class FinishedScreen extends Component
 
         if ($miss->guess === '') {
             return $name;
+        }
+
+        // A pinpointed miss is a different country, not a misspelling of this
+        // one — so it is named rather than aligned letter by letter.
+        if ($miss->kind === GuessKind::Picked) {
+            return UI::column()
+                ->gap(Unit::px(1))
+                ->content(
+                    $name,
+                    UI::text('you picked ' . $miss->guess)
+                        ->fontSize(FontSize::Small)
+                        ->color(Palette::red()),
+                );
         }
 
         // Two chains rather than a conditional ->strikethrough() on a stored

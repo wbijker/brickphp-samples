@@ -6,6 +6,7 @@ use Closure;
 use BrickPHP\Events\InputEvent;
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
+use BrickPHP\UI\GridAlign;
 use BrickPHP\UI\Pseudo;
 use BrickPHP\UI\Shadow;
 use BrickPHP\UI\UI;
@@ -97,9 +98,18 @@ class StartScreen extends Component
                 // flags, headline and labels need a plain ground of their own
                 // to read against, and the panel edge is what separates the
                 // thing you interact with from the picture behind it.
+                //
+                // The panel takes the width it is given, in steps: a phone
+                // column, a wider card on a tablet, and a broad one on a
+                // desktop — where the sections below then sit side by side
+                // rather than stacking into a scroll. Only the ceiling moves;
+                // the panel is always centred and never fills a wide screen
+                // edge to edge, which would leave the eye nowhere to land.
                 UI::column()
                     ->width(Unit::full())
                     ->maxWidth(Unit::px(460))
+                    ->maxWidth(Unit::px(760), Pseudo::sm())
+                    ->maxWidth(Unit::px(1080), Pseudo::lg())
                     ->alignCenter()
                     ->gap(Unit::px(24))
                     ->background(Palette::white())
@@ -122,8 +132,18 @@ class StartScreen extends Component
                                     ->center()->fontSize(FontSize::Base)->color(Palette::subtle()),
                             ),
                         $this->modeChooser(),
-                        $this->continentPicker(),
-                        $this->settings(),
+                        // The two supporting choices — which countries, and
+                        // how strictly — pair off into columns once there is
+                        // width for them, and stack again when there isn't.
+                        UI::grid(1)
+                            ->columns(2, Pseudo::lg())
+                            ->width(Unit::full())
+                            ->gap(Unit::px(24))
+                            ->alignItems(GridAlign::Start)
+                            ->content(
+                                $this->continentPicker(),
+                                $this->settings(),
+                            ),
                         UI::button('Start Quiz')
                             ->width(Unit::full())
                             ->background(Palette::ink())
@@ -173,7 +193,15 @@ class StartScreen extends Component
                             ->clickable()
                             ->onClick(fn() => ($this->onExplore)()),
                     ),
-                UI::row()->wrap()->gap(Unit::px(10))->content(...$cards),
+                // A grid rather than a wrapping row: the cards carry a line of
+                // description each, so left to themselves they size to their
+                // text and a long one takes a row of its own. Equal tracks put
+                // them side by side as soon as the panel is wide enough, all
+                // the same height.
+                UI::grid(1)
+                    ->columns(3, Pseudo::sm())
+                    ->gap(Unit::px(10))
+                    ->content(...$cards),
             );
     }
 
@@ -280,6 +308,28 @@ class StartScreen extends Component
 
     private function settings(): UIElement
     {
+        // The navigation toggle is per-mode and doesn't apply to all of them
+        // (see GameMode::hasNavToggle) — where it doesn't, it and its divider
+        // are left out rather than shown doing nothing.
+        $rows = [];
+        if ($this->quizMode->hasNavToggle()) {
+            $rows[] = new Toggle(
+                $this->quizMode->navToggleLabel(),
+                $this->quizMode->navToggleDescription(),
+                $this->showFlags,
+                $this->onToggleShowFlags,
+            );
+            $rows[] = UI::container()->extendX()->height(Unit::em(0.0625))->background(Palette::border());
+        }
+        $rows[] = new Toggle(
+            'Strict mode',
+            'One guess per question — a wrong answer is final',
+            $this->strict,
+            $this->onToggleStrict,
+        );
+        $rows[] = UI::container()->extendX()->height(Unit::em(0.0625))->background(Palette::border());
+        $rows[] = $this->flagOrderSetting();
+
         return UI::column()
             ->width(Unit::full())
             ->background(Palette::white())
@@ -287,23 +337,7 @@ class StartScreen extends Component
             ->borderColor(Palette::border())
             ->rounded(Unit::px(16))
             ->clipContent()
-            ->content(
-                new Toggle(
-                    $this->quizMode->navToggleLabel(),
-                    $this->quizMode->navToggleDescription(),
-                    $this->showFlags,
-                    $this->onToggleShowFlags,
-                ),
-                UI::container()->extendX()->height(Unit::em(0.0625))->background(Palette::border()),
-                new Toggle(
-                    'Strict mode',
-                    'One guess per question — a wrong answer is final',
-                    $this->strict,
-                    $this->onToggleStrict,
-                ),
-                UI::container()->extendX()->height(Unit::em(0.0625))->background(Palette::border()),
-                $this->flagOrderSetting(),
-            );
+            ->content(...$rows);
     }
 
     /**

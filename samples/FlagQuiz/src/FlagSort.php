@@ -35,15 +35,15 @@ enum FlagSort: string
     }
 
     /**
-     * The order options offered for a game mode. Locations is map-based, so the
-     * flag-appearance groupings make no sense there — only Random and the
+     * The order options offered for a game mode. The map modes ask about places,
+     * so the flag-appearance groupings make no sense there — only Random and the
      * region grouping apply.
      *
      * @return self[]
      */
     public static function forMode(GameMode $mode): array
     {
-        return $mode === GameMode::Location
+        return $mode->usesMap()
             ? [self::Random, self::Continent]
             : [self::Random, self::Color, self::Shape, self::ShapeColor, self::Similarity];
     }

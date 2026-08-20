@@ -2,6 +2,7 @@
 
 namespace Samples\FlagQuiz;
 
+use BrickPHP\Events\Key;
 use BrickPHP\Js\Dom;
 use BrickPHP\UI\Direction;
 use BrickPHP\UI\FontSize;
@@ -60,6 +61,14 @@ class FlagQuiz extends Component
     /** Explore mode: ISO-2 of the country currently focused on the map. */
     private string $exploreIso = '';
 
+    /**
+     * Pinpoint mode: the country wrongly clicked for the question still on
+     * screen, so the map can show where the player went and the prompt can name
+     * it. Only ever set while {@see $wrong} is — cleared on every move to a new
+     * question, since it belongs to the question that was missed, not the next.
+     */
+    private string $pickedIso = '';
+
     /** Map modes: auto-zoom to the highlighted / selected country. */
     private bool $autoZoom = true;
 
@@ -112,6 +121,7 @@ class FlagQuiz extends Component
         $this->useState($this->mode);
         $this->useState($this->quizMode);
         $this->useState($this->exploreIso);
+        $this->useState($this->pickedIso);
         $this->useState($this->autoZoom);
         $this->useState($this->showFlags);
         $this->useState($this->strict);
@@ -197,6 +207,7 @@ class FlagQuiz extends Component
         $this->index = 0;
         $this->status = array_fill(0, count($indexes), Answer::Pending);
         $this->wrong = false;
+        $this->pickedIso = '';
         $this->history = [];
         $this->wrongGuesses = [];
         $this->elapsed = 0;
@@ -207,7 +218,10 @@ class FlagQuiz extends Component
         // browser only flushes autofocus candidates while the document loads,
         // and this field is inserted by a patch long after that — so the
         // attribute is silently ignored and focus stays on the Start button.
-        Dom::focus('fq-input');
+        // Pinpoint is answered on the map and has no field to focus.
+        if (!$this->mode->answersByClick()) {
+            Dom::focus('fq-input');
+        }
     }
 
     /**
@@ -225,7 +239,12 @@ class FlagQuiz extends Component
         foreach ($this->order as $pos => $countryIdx) {
             $status = $this->status[$pos] ?? Answer::Pending;
             if ($status === Answer::Wrong || $status === Answer::Skipped) {
-                $missed[] = new MissedFlag($pos, $all[$countryIdx], $this->wrongGuesses[$pos] ?? '');
+                $missed[] = new MissedFlag(
+                    $pos,
+                    $all[$countryIdx],
+                    $this->wrongGuesses[$pos] ?? '',
+                    $this->mode->answersByClick() ? GuessKind::Picked : GuessKind::Typed,
+                );
             }
         }
         return $missed;
@@ -247,28 +266,53 @@ class FlagQuiz extends Component
     }
 
     /**
-     * A clicked country in Locations mode — navigation only, never an answer.
-     * The map is something you drag, zoom and poke at, and the browser calls
-     * the end of any of that a click; nothing that casual should be able to
-     * spend an answer. Guesses arrive one way, through the input: Enter
-     * submits, the buttons pass or skip.
+     * A clicked country on the quiz map.
      *
-     * So a click only moves the question: with "free navigation" on, clicking
-     * an unanswered country makes it the target. With it off, the target is
-     * fixed and a click does nothing at all.
+     * In Pinpoint the click is the answer — that is the whole mode, and the
+     * question (a flag and a name) gives nothing away about where the click
+     * should land. Everywhere else it is navigation only: the map is something
+     * you drag, zoom and poke at, and the browser calls the end of any of that
+     * a click, so in the modes that are answered by typing nothing that casual
+     * is allowed to spend an answer.
+     *
+     * As navigation it moves the question rather than answering it: with "free
+     * navigation" on, clicking an unanswered country makes it the target; with
+     * it off the target is fixed and a click does nothing at all.
      */
     private function handlePick(string $iso): void
     {
+        $iso = strtolower($iso);
+        if ($this->mode->answersByClick()) {
+            $this->judgePick($iso);
+            return;
+        }
         if (!$this->showFlags) {
             return;
         }
-        $iso = strtolower($iso);
         $pos = $this->posForIso($iso);
         if ($pos !== null && ($this->status[$pos] ?? Answer::Pending) === Answer::Pending) {
             $this->index = $pos;
             $this->wrong = false;
             Dom::focus('fq-input');
         }
+    }
+
+    /**
+     * Pinpoint: judge a clicked country against the flag on show. A miss is
+     * remembered by name — the country they landed on — which is what the
+     * results screen reads back and, until the question changes, what the map
+     * paints red.
+     */
+    private function judgePick(string $iso): void
+    {
+        $correct = $iso === $this->current()->code;
+        if (!$correct) {
+            $picked = Country::byCode($iso);
+            // Recorded before judging, which may advance past this position.
+            $this->wrongGuesses[$this->index] = $picked?->name ?? '';
+            $this->pickedIso = $iso;
+        }
+        $this->judge($correct);
     }
 
     /** Explore mode: focus the map on the clicked / chosen country. */
@@ -394,6 +438,8 @@ class FlagQuiz extends Component
 
     private function advance(): void
     {
+        // The wrong pick belonged to the question being left behind.
+        $this->pickedIso = '';
         $n = count($this->order);
         for ($k = 1; $k <= $n; $k++) {
             $j = ($this->index + $k) % $n;
@@ -414,6 +460,7 @@ class FlagQuiz extends Component
         }
         $this->index = $pos;
         $this->wrong = false;
+        $this->pickedIso = '';
         // Jumping moved focus to the clicked flag — return it to the input
         // (runs after the DOM patch is applied).
         Dom::focus('fq-input');
@@ -467,6 +514,7 @@ class FlagQuiz extends Component
                 match (true) {
                     $this->phase === GamePhase::Finished => $this->buildFinished($total),
                     $isExplore => $this->buildExplore(),
+                    $this->phase === GamePhase::Playing && $this->mode === GameMode::Pinpoint => $this->buildPlayPinpoint($total, $answered),
                     $this->phase === GamePhase::Playing && $this->mode === GameMode::Location => $this->buildPlayLocation($total, $answered),
                     $this->phase === GamePhase::Playing => $this->buildPlay($total, $answered),
                     default => new StartScreen(
@@ -566,17 +614,8 @@ class FlagQuiz extends Component
         $right = $this->countHistory(Answer::Correct);
         $wrong = $this->countHistory(Answer::Wrong);
 
-        $all = Country::all();
-        $greens = [];
-        $reds = [];
-        foreach ($this->order as $pos => $countryIdx) {
-            $status = $this->status[$pos] ?? Answer::Pending;
-            if ($status === Answer::Correct) {
-                $greens[] = $all[$countryIdx]->code;
-            } elseif ($status === Answer::Wrong) {
-                $reds[] = $all[$countryIdx]->code;
-            }
-        }
+        $greens = $this->isosAnswered(Answer::Correct);
+        $reds = $this->isosAnswered(Answer::Wrong);
         if ($this->wrong) {
             // A lenient miss flashes the target red until the next try.
             $reds[] = $this->current()->code;
@@ -635,6 +674,147 @@ class FlagQuiz extends Component
                 ),
                 new BrandInfo(fn() => $this->phase = GamePhase::Start, fn() => $this->finish()),
             );
+    }
+
+    /**
+     * Pinpoint mode: the flag and its name above a blank world map, and the
+     * answer is where you click. Nothing on the map is highlighted and it never
+     * auto-zooms — either would give the question away — so the map holds still
+     * and only fills in behind you as countries are answered.
+     */
+    private function buildPlayPinpoint(int $total, int $answered): UIElement
+    {
+        $score = $answered > 0 ? (int)round($this->countStatus(Answer::Correct) / $answered * 100) : 0;
+        $time = Duration::since($this->startTime);
+        $right = $this->countHistory(Answer::Correct);
+        $wrong = $this->countHistory(Answer::Wrong);
+
+        $greens = $this->isosAnswered(Answer::Correct);
+        $reds = $this->isosAnswered(Answer::Wrong);
+        // A lenient miss leaves the country actually clicked showing red until
+        // the next try — where the guess went is the correction.
+        if ($this->wrong && $this->pickedIso !== '') {
+            $reds[] = $this->pickedIso;
+        }
+
+        // Fullscreen: the map fills the viewport edge-to-edge — no card chrome
+        // (margins / border / rounding / shadow) boxing it in.
+        return UI::column()
+            ->grow()
+            ->minHeight(Unit::em(0))
+            ->background(Palette::white())
+            ->clipContent()
+            // Escape passes on the flag, as it does in the typed modes. There
+            // it hangs off the answer field; here there is no field, so the
+            // screen itself carries the key.
+            ->onGlobalKeyDown(fn() => $this->next(), [Key::Escape], preventDefault: true)
+            ->content(
+                new ScoreBar($answered, $total, $score, $right, $wrong, $time, array_slice($this->history, -5)),
+                $this->buildPinpointPrompt(),
+                UI::column()
+                    ->grow()
+                    ->minHeight(Unit::em(0))
+                    ->content(
+                        new WorldMap(
+                            '',
+                            $greens,
+                            $reds,
+                            fn(string $iso) => $this->handlePick($iso),
+                            autoZoom: false,
+                        ),
+                    ),
+                $this->buildPinpointHint(),
+                new BrandInfo(fn() => $this->phase = GamePhase::Start, fn() => $this->finish()),
+            );
+    }
+
+    /**
+     * The Pinpoint question: the flag, its name, and how the answer is going —
+     * asking for the click, or naming the country the last one landed on.
+     */
+    private function buildPinpointPrompt(): UIElement
+    {
+        $country = $this->current();
+        $picked = $this->pickedIso !== '' ? Country::byCode($this->pickedIso) : null;
+
+        return UI::row()
+            ->noShrink()
+            ->wrap()
+            ->alignMiddle()
+            ->gap(Unit::px(14))
+            ->bordered(bottom: 1)
+            ->borderColor($this->wrong ? Palette::red() : Palette::border())
+            ->background($this->wrong ? Palette::redWash() : Palette::white())
+            ->padding(x: Unit::px(16), y: Unit::px(12))
+            ->padding(x: Unit::px(24), pseudo: Pseudo::lg())
+            ->content(
+                UI::image($country->thumbUrl(), $country->name)
+                    ->noShrink()
+                    ->width(Unit::px(60))
+                    ->height(Unit::px(40))
+                    ->objectContain()
+                    ->rounded(Unit::px(4))
+                    ->bordered()
+                    ->borderColor(Palette::border())
+                    ->shadow(Shadow::Small),
+                UI::column()
+                    ->gap(Unit::px(2))
+                    ->content(
+                        UI::text($country->name)
+                            ->weight(FontWeight::SemiBold)
+                            ->fontSize(FontSize::Large)
+                            ->fontSize(FontSize::TwoXL, Pseudo::sm()),
+                        $picked !== null
+                            ? UI::text('That is ' . $picked->name . ' — try again')
+                                ->fontSize(FontSize::Small)->weight(FontWeight::Medium)->color(Palette::red())
+                            : UI::text('Click this country on the map')
+                                ->fontSize(FontSize::Small)->color(Palette::subtle()),
+                    ),
+            );
+    }
+
+    /** The Pinpoint footer: how to answer, and the way out of a flag. */
+    private function buildPinpointHint(): UIElement
+    {
+        return UI::row()
+            ->noShrink()
+            ->alignMiddle()
+            ->gap(Unit::px(8))
+            ->bordered(top: 1)
+            ->borderColor(Palette::border())
+            ->padding(x: Unit::px(22), y: Unit::px(14))
+            ->fontSize(FontSize::Small)
+            ->color(Palette::subtle())
+            ->content(
+                UI::text('Click the country · Esc to pass'),
+                UI::text('·')->color(Palette::dot()),
+                UI::button('Skip')
+                    ->borderNone()
+                    ->background(Palette::transparent())
+                    ->color(Palette::blue())
+                    ->weight(FontWeight::SemiBold)
+                    ->padding(Unit::none())
+                    ->clickable()
+                    ->onClick(fn() => $this->skip()),
+            );
+    }
+
+    /**
+     * The ISO-2 codes of every question decided this way — what the map paints
+     * green and red.
+     *
+     * @return string[]
+     */
+    private function isosAnswered(Answer $answer): array
+    {
+        $all = Country::all();
+        $out = [];
+        foreach ($this->order as $pos => $countryIdx) {
+            if (($this->status[$pos] ?? Answer::Pending) === $answer) {
+                $out[] = $all[$countryIdx]->code;
+            }
+        }
+        return $out;
     }
 
     /**
