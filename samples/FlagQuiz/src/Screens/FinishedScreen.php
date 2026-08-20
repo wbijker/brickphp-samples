@@ -13,6 +13,7 @@ use BrickPHP\UI\UIElement;
 use BrickPHP\UI\Unit;
 use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
+use Samples\FlagQuiz\Attribute;
 use Samples\FlagQuiz\DiffKind;
 use Samples\FlagQuiz\GuessDiff;
 use Samples\FlagQuiz\GuessKind;
@@ -20,12 +21,16 @@ use Samples\FlagQuiz\MissedFlag;
 use Samples\FlagQuiz\Palette;
 
 /**
- * The results screen: the final score, summary stats, the flags to review and
- * the play-again / back-to-start actions.
+ * The results screen: the final score, summary stats, the questions to review
+ * and the play-again / back-to-start actions. What a review chip leads with is
+ * whatever the game was asking for — see $asked.
  */
 class FinishedScreen extends Component
 {
     /**
+     * @param Attribute    $asked  what the game was asking for, which is what a
+     *   review chip has to lead with: the country's name where that was the
+     *   question, its capital where that was.
      * @param MissedFlag[] $missed
      * @param Closure $onRestart     fn(): void
      * @param Closure $onBack        fn(): void
@@ -37,6 +42,7 @@ class FinishedScreen extends Component
         private int $accuracy,
         private int $score,
         private string $time,
+        private Attribute $asked,
         private array $missed,
         private Closure $onRestart,
         private Closure $onBack,
@@ -133,11 +139,15 @@ class FinishedScreen extends Component
      * A review chip's text: the right answer, and under it what the player
      * typed — aligned against the answer by {@see GuessDiff}, so the letters
      * they got carry no colour and only the edits between the two words do.
-     * Flags they skipped without typing anything keep the single line.
+     * Questions they skipped without answering keep the single line.
      */
     private function buildChipLabel(MissedFlag $miss): UIElement
     {
-        $name = UI::text($miss->country->name)->fontSize(FontSize::Small)->weight(FontWeight::Medium);
+        // The answer they were after, which isn't always the country's name:
+        // asked for a capital, the chip has to lead with the capital, or it
+        // reviews a question nobody was asked.
+        $answer = $this->asked->textOf($miss->country);
+        $name = UI::text($answer)->fontSize(FontSize::Small)->weight(FontWeight::Medium);
 
         if ($miss->guess === '') {
             return $name;
@@ -163,7 +173,7 @@ class FinishedScreen extends Component
         // run either side of one is a separate node, so the gap between words
         // would otherwise collapse.
         $letters = [];
-        foreach (GuessDiff::compare($miss->country->name, $miss->guess) as $part) {
+        foreach (GuessDiff::compare($answer, $miss->guess) as $part) {
             if ($part->kind === DiffKind::Added) {
                 // Struck out as well as red: these are letters the player put
                 // there that the name has no room for, and the rule is what
@@ -241,7 +251,7 @@ class FinishedScreen extends Component
                     ->alignBetween()
                     ->gap(Unit::px(12))
                     ->content(
-                        UI::text('Flags to review — ' . count($this->missed))
+                        UI::text('To review — ' . count($this->missed))
                             ->fontSize(FontSize::ExtraSmall)->uppercase()->color(Palette::labelMuted()),
                         UI::button('Practise these ' . count($this->missed) . ' →')
                             ->noShrink()

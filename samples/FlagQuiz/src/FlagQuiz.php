@@ -17,9 +17,9 @@ use BrickPHP\VNode\VNode;
 use Samples\FlagQuiz\Components\BrandInfo;
 use Samples\FlagQuiz\Components\ChipToggle;
 use Samples\FlagQuiz\Components\CountryList;
+use Samples\FlagQuiz\Components\FlagChoices;
 use Samples\FlagQuiz\Components\FlagGrid;
 use Samples\FlagQuiz\Components\GuessInput;
-use Samples\FlagQuiz\Components\GuessPanel;
 use Samples\FlagQuiz\Components\ScoreBar;
 use Samples\FlagQuiz\Components\WorldMap;
 use Samples\FlagQuiz\Screens\FinishedScreen;
@@ -28,10 +28,16 @@ use Samples\FlagQuiz\Screens\StartScreen;
 /**
  * Vexi — the game's stateful core. Holds the session state and the rules,
  * and composes the screens/components ({@see StartScreen}, {@see ScoreBar},
- * {@see GuessPanel}, {@see FlagGrid}, {@see FinishedScreen}) that render it.
+ * {@see FlagChoices}, {@see FlagGrid}, {@see FinishedScreen}) that render it.
  * Country data lives in {@see Country}, colours in {@see Palette}. The phase,
  * mode and per-question outcomes are typed enums ({@see GamePhase},
  * {@see GameMode}, {@see Answer}) rather than magic strings.
+ *
+ * A game is a {@see Quiz}: some of a country's four {@see Attribute}s shown,
+ * and one of them asked for. That pairing decides everything downstream — how
+ * the question is drawn, whether the map is the question or the answer, what
+ * an answer even is — so the screens below ask it rather than testing for
+ * named modes.
  *
  * Layout is responsive: one block that stacks vertically on narrow screens and
  * splits left/right from the `lg` breakpoint up. The page scrolls on small
@@ -46,25 +52,34 @@ use Samples\FlagQuiz\Screens\StartScreen;
  */
 class FlagQuiz extends Component
 {
+    /** How many flags are offered when the flag is the thing being asked for. */
+    private const FLAG_CHOICES = 6;
+
     private GamePhase $phase = GamePhase::Start;
 
-    /** The mode currently being played (drives routing). */
-    private GameMode $mode = GameMode::Flags;
+    /** Whether a quiz is being played or the map is being browsed. */
+    private GameMode $mode = GameMode::Quiz;
 
     /**
-     * The quiz mode selected on the start screen (Flags or Location only).
-     * Explore is launched separately via its link, so it never lands here —
-     * keeping the start screen's card selection and settings always valid.
+     * The question being asked, as chosen on the start screen: the attributes
+     * shown, and the one asked for. The destination is never also a source —
+     * {@see setDestination()} keeps that true — so the pair always describes a
+     * question that can be answered. Held as two pieces of state rather than a
+     * {@see Quiz} because state is what a session stores; the pairing itself is
+     * built from them per render.
+     *
+     * @var Attribute[]
      */
-    private GameMode $quizMode = GameMode::Flags;
+    private array $sources = [Attribute::Flag];
+    private Attribute $destination = Attribute::Name;
 
     /** Explore mode: ISO-2 of the country currently focused on the map. */
     private string $exploreIso = '';
 
     /**
-     * Pinpoint mode: the country wrongly clicked for the question still on
-     * screen, so the map can show where the player went and the prompt can name
-     * it. Only ever set while {@see $wrong} is — cleared on every move to a new
+     * The country wrongly pointed at for the question still on screen, so the
+     * map or the flag cell can show where the player went and the prompt can
+     * name it. Only ever set while {@see $wrong} is — cleared on every move to a new
      * question, since it belongs to the question that was missed, not the next.
      */
     private string $pickedIso = '';
@@ -119,7 +134,8 @@ class FlagQuiz extends Component
 
         $this->useState($this->phase);
         $this->useState($this->mode);
-        $this->useState($this->quizMode);
+        $this->useState($this->sources);
+        $this->useState($this->destination);
         $this->useState($this->exploreIso);
         $this->useState($this->pickedIso);
         $this->useState($this->autoZoom);
@@ -141,10 +157,16 @@ class FlagQuiz extends Component
     // Game logic
     // ============================================================
 
-    /** Start the selected quiz mode (Flags or Location). */
+    /** The question this game is asking — built from state, never stored. */
+    private function quiz(): Quiz
+    {
+        return new Quiz($this->sources, $this->destination);
+    }
+
+    /** Start a quiz on the chosen pairing. */
     private function startQuiz(): void
     {
-        $this->mode = $this->quizMode;
+        $this->mode = GameMode::Quiz;
         $this->startGame();
     }
 
@@ -218,46 +240,47 @@ class FlagQuiz extends Component
         // browser only flushes autofocus candidates while the document loads,
         // and this field is inserted by a patch long after that — so the
         // attribute is silently ignored and focus stays on the Start button.
-        // Pinpoint is answered on the map and has no field to focus.
-        if (!$this->mode->answersByClick()) {
+        // Only the typed questions have a field to focus; the rest are
+        // answered by pointing at something.
+        if ($this->quiz()->isTyped()) {
             Dom::focus('fq-input');
         }
     }
 
     /**
-     * The flags actually got wrong or given up on — not the ones never
+     * The questions actually got wrong or given up on — not the ones never
      * reached, which are still pending when a game is finished early. Each
-     * carries whatever the player last typed for it, so the results screen
-     * and a retry both read from one walk of the order.
+     * carries whatever the player last answered, so the results screen and a
+     * retry both read from one walk of the order.
      *
      * @return MissedFlag[]
      */
     private function missedFlags(): array
     {
         $all = Country::all();
+        $kind = $this->quiz()->guessKind();
         $missed = [];
         foreach ($this->order as $pos => $countryIdx) {
             $status = $this->status[$pos] ?? Answer::Pending;
             if ($status === Answer::Wrong || $status === Answer::Skipped) {
-                $missed[] = new MissedFlag(
-                    $pos,
-                    $all[$countryIdx],
-                    $this->wrongGuesses[$pos] ?? '',
-                    $this->mode->answersByClick() ? GuessKind::Picked : GuessKind::Typed,
-                );
+                $missed[] = new MissedFlag($pos, $all[$countryIdx], $this->wrongGuesses[$pos] ?? '', $kind);
             }
         }
         return $missed;
     }
 
     /**
-     * Handle a submitted guess. A correct guess always advances. A wrong guess
-     * is final (marked and advanced) in strict mode, otherwise it just flags
-     * the input red so the player can retry.
+     * A typed answer. Right or wrong is the destination's business — the same
+     * field takes a country name or a capital city, and only the attribute
+     * being asked for knows which words count.
+     *
+     * A correct answer always advances. A wrong one is final (marked and
+     * advanced) in strict mode, otherwise it just flags the input red so the
+     * player can retry.
      */
     private function handleGuess(string $value): void
     {
-        $correct = $this->current()->matches($value);
+        $correct = $this->destination->matches($this->current(), $value);
         // Recorded before judging, which may advance past this position.
         if (!$correct && trim($value) !== '') {
             $this->wrongGuesses[$this->index] = trim($value);
@@ -268,12 +291,12 @@ class FlagQuiz extends Component
     /**
      * A clicked country on the quiz map.
      *
-     * In Pinpoint the click is the answer — that is the whole mode, and the
-     * question (a flag and a name) gives nothing away about where the click
-     * should land. Everywhere else it is navigation only: the map is something
-     * you drag, zoom and poke at, and the browser calls the end of any of that
-     * a click, so in the modes that are answered by typing nothing that casual
-     * is allowed to spend an answer.
+     * When the map is what's being asked for, the click is the answer — that
+     * is the whole question, and nothing on the map gives away where it should
+     * land. When the map is instead part of the question, a click is navigation
+     * only: the map is something you drag, zoom and poke at, and the browser
+     * calls the end of any of that a click, so where the answer is typed
+     * nothing that casual is allowed to spend one.
      *
      * As navigation it moves the question rather than answering it: with "free
      * navigation" on, clicking an unanswered country makes it the target; with
@@ -282,7 +305,7 @@ class FlagQuiz extends Component
     private function handlePick(string $iso): void
     {
         $iso = strtolower($iso);
-        if ($this->mode->answersByClick()) {
+        if ($this->quiz()->mapIsAnswer()) {
             $this->judgePick($iso);
             return;
         }
@@ -298,10 +321,11 @@ class FlagQuiz extends Component
     }
 
     /**
-     * Pinpoint: judge a clicked country against the flag on show. A miss is
-     * remembered by name — the country they landed on — which is what the
-     * results screen reads back and, until the question changes, what the map
-     * paints red.
+     * An answer given by pointing — a country clicked on the map, or a flag
+     * chosen from the handful on offer. Both name a country, so both are judged
+     * the same way. A miss is remembered by the name of the country landed on,
+     * which is what the results screen reads back and, until the question
+     * changes, what the map or the flag cell shows in red.
      */
     private function judgePick(string $iso): void
     {
@@ -313,6 +337,45 @@ class FlagQuiz extends Component
             $this->pickedIso = $iso;
         }
         $this->judge($correct);
+    }
+
+    /**
+     * The flags on offer when the flag is what's being asked for: the right one
+     * and five others, drawn from the same continent where there are enough of
+     * them so the choice is between neighbours.
+     *
+     * Deterministic, and deliberately so — the options are worked out afresh on
+     * every render, and a shuffle would deal a new hand each time the clock
+     * ticked. Ordering by a hash of the question and the code gives the same
+     * six in the same places until the question changes.
+     *
+     * @return Country[]
+     */
+    private function flagChoices(): array
+    {
+        $answer = $this->current();
+        $seed = $this->startTime . ':' . $this->index . ':' . $answer->code;
+        $order = fn(string $salt, Country $a, Country $b): int
+            => crc32($seed . $salt . $a->code) <=> crc32($seed . $salt . $b->code);
+
+        $pool = array_values(array_filter(
+            Country::all(),
+            fn(Country $c) => $c->code !== $answer->code && $c->continent === $answer->continent,
+        ));
+        if (count($pool) < self::FLAG_CHOICES - 1) {
+            // Oceania on its own can't fill six; the rest of the world tops it up.
+            $pool = array_merge($pool, array_values(array_filter(
+                Country::all(),
+                fn(Country $c) => $c->code !== $answer->code && $c->continent !== $answer->continent,
+            )));
+        }
+        usort($pool, fn(Country $a, Country $b) => $order('pool', $a, $b));
+
+        $choices = array_slice($pool, 0, self::FLAG_CHOICES - 1);
+        $choices[] = $answer;
+        // Shuffled again on a different salt, so the answer isn't always last.
+        usort($choices, fn(Country $a, Country $b) => $order('place', $a, $b));
+        return $choices;
     }
 
     /** Explore mode: focus the map on the clicked / chosen country. */
@@ -393,13 +456,60 @@ class FlagQuiz extends Component
     }
 
     /**
-     * Switch the selected quiz mode. The order options differ per mode, so if
-     * the current choice isn't offered for the new mode, fall back to Random.
+     * Show this attribute, or stop showing it. The last one can't be turned
+     * off — a question with nothing shown is nothing to go on — and the one
+     * being asked for isn't on offer at all.
      */
-    private function setQuizMode(GameMode $mode): void
+    private function toggleSource(Attribute $attribute): void
     {
-        $this->quizMode = $mode;
-        if (!in_array($this->flagSort, FlagSort::forMode($mode), true)) {
+        if ($attribute === $this->destination) {
+            return;
+        }
+        if (in_array($attribute, $this->sources, true)) {
+            if (count($this->sources) <= 1) {
+                return;
+            }
+            $this->sources = array_values(
+                array_filter($this->sources, fn(Attribute $a) => $a !== $attribute),
+            );
+        } else {
+            $this->sources[] = $attribute;
+            $this->sortSources();
+        }
+        $this->settleFlagSort();
+    }
+
+    /**
+     * Ask for this attribute instead. It can no longer be one of the things
+     * shown, and if it was the only one, the attribute it replaces takes its
+     * place on the left — the question simply turns around, which is what
+     * asking for what you were just shown means.
+     */
+    private function setDestination(Attribute $attribute): void
+    {
+        if ($attribute === $this->destination) {
+            return;
+        }
+        $replaced = $this->destination;
+        $this->destination = $attribute;
+
+        $sources = array_values(array_filter($this->sources, fn(Attribute $a) => $a !== $attribute));
+        $this->sources = $sources === [] ? [$replaced] : $sources;
+        $this->sortSources();
+        $this->settleFlagSort();
+    }
+
+    /** Keep the shown attributes in the lists' own order, however they were ticked. */
+    private function sortSources(): void
+    {
+        $order = array_flip(array_map(fn(Attribute $a) => $a->value, Attribute::cases()));
+        usort($this->sources, fn(Attribute $a, Attribute $b) => $order[$a->value] <=> $order[$b->value]);
+    }
+
+    /** The order options differ per pairing; drop a choice the new one doesn't offer. */
+    private function settleFlagSort(): void
+    {
+        if (!in_array($this->flagSort, FlagSort::forQuiz($this->quiz()), true)) {
             $this->flagSort = FlagSort::Random;
         }
     }
@@ -514,18 +624,21 @@ class FlagQuiz extends Component
                 match (true) {
                     $this->phase === GamePhase::Finished => $this->buildFinished($total),
                     $isExplore => $this->buildExplore(),
-                    $this->phase === GamePhase::Playing && $this->mode === GameMode::Pinpoint => $this->buildPlayPinpoint($total, $answered),
-                    $this->phase === GamePhase::Playing && $this->mode === GameMode::Location => $this->buildPlayLocation($total, $answered),
-                    $this->phase === GamePhase::Playing => $this->buildPlay($total, $answered),
+                    // One playing screen for all twelve pairings: the map ones
+                    // fill the viewport, the rest sit on a card.
+                    $this->phase === GamePhase::Playing && $this->quiz()->usesMap()
+                        => $this->buildPlayOnMap($total, $answered),
+                    $this->phase === GamePhase::Playing => $this->buildPlayOnCard($total, $answered),
                     default => new StartScreen(
                         $total,
-                        $this->quizMode,
+                        $this->quiz(),
                         $this->showFlags,
                         $this->strict,
                         $this->flagSort,
                         $this->continents,
                         fn() => $this->startQuiz(),
-                        fn(GameMode $mode) => $this->setQuizMode($mode),
+                        fn(Attribute $a) => $this->toggleSource($a),
+                        fn(Attribute $a) => $this->setDestination($a),
                         fn() => $this->toggleShowFlags(),
                         fn() => $this->toggleStrict(),
                         fn(FlagSort $s) => $this->setFlagSort($s),
@@ -536,16 +649,38 @@ class FlagQuiz extends Component
             );
     }
 
-    private function buildPlay(int $total, int $answered): UIElement
+    /** The header of stats, identical whatever is being asked. */
+    private function scoreBar(int $total, int $answered): ScoreBar
     {
         $score = $answered > 0 ? (int)round($this->countStatus(Answer::Correct) / $answered * 100) : 0;
-        $time = Duration::since($this->startTime);
 
-        $right = $this->countHistory(Answer::Correct);
-        $wrong = $this->countHistory(Answer::Wrong);
+        return new ScoreBar(
+            $answered,
+            $total,
+            $score,
+            $this->countHistory(Answer::Correct),
+            $this->countHistory(Answer::Wrong),
+            Duration::since($this->startTime),
+            array_slice($this->history, -5),
+        );
+    }
 
+    /**
+     * The playing screen for the pairings with no map in them: the question on
+     * a card, and — while the flags are the question and the answer is typed —
+     * the deck of remaining flags beside it.
+     */
+    private function buildPlayOnCard(int $total, int $answered): UIElement
+    {
+        $quiz = $this->quiz();
         $remaining = $this->remainingItems();
-        $showGrid = $this->showFlags && count($remaining) > 0;
+        // The deck is a way of moving between questions, so it needs questions
+        // it can show: the flags, and an answer given somewhere other than by
+        // clicking one of them.
+        $showGrid = $this->showFlags
+            && $quiz->isTyped()
+            && $quiz->shows(Attribute::Flag)
+            && count($remaining) > 0;
 
         // One off-white block: stacks vertically on small screens, splits
         // left/right at lg. The left panel is white; the flag grid shows the
@@ -563,27 +698,23 @@ class FlagQuiz extends Component
             ->shadow(Shadow::Large)
             ->clipContent()
             ->content(
-                $this->buildLeftPanel($answered, $total, $score, $right, $wrong, $time, $showGrid),
+                $this->buildCardPanel($total, $answered, $showGrid),
                 ...($showGrid ? [new FlagGrid($remaining, $this->index, fn(int $pos) => $this->jumpTo($pos))] : []),
             );
     }
 
-    private function buildLeftPanel(int $answered, int $total, int $score, int $right, int $wrong, Duration $time, bool $showGrid): UIElement
+    private function buildCardPanel(int $total, int $answered, bool $showGrid): UIElement
     {
         $children = [
-            new ScoreBar($answered, $total, $score, $right, $wrong, $time, array_slice($this->history, -5)),
-            new GuessPanel(
-                $this->current(),
-                $this->wrong,
-                fn(string $value) => $this->handleGuess($value),
-                fn() => $this->skip(),
-                fn() => $this->next(),
-            ),
+            $this->scoreBar($total, $answered),
+            $this->buildCardPrompt(),
+            ...$this->buildAnswer(),
             new BrandInfo(fn() => $this->phase = GamePhase::Start, fn() => $this->finish()),
         ];
 
-        // Built as one fluent chain per branch so the CssExtractor harvests the
-        // width/border classes (chaining onto a stored variable is not scanned).
+        // Built as one fluent chain per branch: the two panels differ in half
+        // their layout, and a shared chain with six conditionals in it reads
+        // worse than saying each one plainly.
         if ($showGrid) {
             // Fixed sidebar at lg, full-width stacked below.
             return UI::column()
@@ -606,175 +737,102 @@ class FlagQuiz extends Component
             ->content(...$children);
     }
 
-    /** Locations mode: scorebar, the world map (target highlighted), the input. */
-    private function buildPlayLocation(int $total, int $answered): UIElement
+    /**
+     * The playing screen for the pairings the map is part of — as the question
+     * (the country highlighted) or as the answer (a blank map to click). It
+     * fills the viewport edge to edge: no card chrome boxing the map in.
+     */
+    private function buildPlayOnMap(int $total, int $answered): UIElement
     {
-        $score = $answered > 0 ? (int)round($this->countStatus(Answer::Correct) / $answered * 100) : 0;
-        $time = Duration::since($this->startTime);
-        $right = $this->countHistory(Answer::Correct);
-        $wrong = $this->countHistory(Answer::Wrong);
+        $quiz = $this->quiz();
 
         $greens = $this->isosAnswered(Answer::Correct);
         $reds = $this->isosAnswered(Answer::Wrong);
         if ($this->wrong) {
-            // A lenient miss flashes the target red until the next try.
-            $reds[] = $this->current()->code;
+            // A lenient miss shows red until the next try: where the map is the
+            // answer that's the country clicked in error, and otherwise the one
+            // being asked about, which is already the highlighted target.
+            $reds[] = $quiz->mapIsAnswer() ? $this->pickedIso : $this->current()->code;
         }
+        $reds = array_values(array_filter($reds, fn(string $iso) => $iso !== ''));
 
-        // Fullscreen: the map fills the viewport edge-to-edge — no card chrome
-        // (margins / border / rounding / shadow) boxing it in.
-        return UI::column()
+        $screen = UI::column()
             ->grow()
             ->minHeight(Unit::em(0))
             ->background(Palette::white())
-            ->clipContent()
-            ->content(
-                new ScoreBar($answered, $total, $score, $right, $wrong, $time, array_slice($this->history, -5)),
-                // Prompt + auto-zoom control. Wraps so the chip drops below the
-                // prompt on narrow screens instead of crowding it.
-                UI::row()
-                    ->noShrink()
-                    ->wrap()
-                    ->alignMiddle()
-                    ->alignBetween()
-                    ->gap(Unit::px(10))
-                    ->bordered(bottom: 1)
-                    ->borderColor(Palette::border())
-                    ->padding(x: Unit::px(16), y: Unit::px(12))
-                    ->padding(x: Unit::px(24), pseudo: Pseudo::lg())
-                    ->content(
-                        UI::row()->wrap()->alignMiddle()->gap(Unit::px(8))->content(
-                            UI::text('Which country is highlighted?')
-                                ->fontSize(FontSize::Small)->weight(FontWeight::SemiBold),
-                            UI::text($this->showFlags
-                                ? '· type its name · tap any country to jump there'
-                                : '· type its name')
-                                ->fontSize(FontSize::Small)->color(Palette::subtle()),
-                        ),
-                        new ChipToggle('Auto-zoom', $this->autoZoom, fn() => $this->toggleAutoZoom()),
+            ->clipContent();
+
+        // Escape passes on the question from anywhere on the screen. Where the
+        // answer is typed the field owns that key; where it isn't, there is no
+        // field, so the screen carries it.
+        if (!$quiz->isTyped()) {
+            $screen->onGlobalKeyDown(fn() => $this->next(), [Key::Escape], preventDefault: true);
+        }
+
+        $children = [
+            $this->scoreBar($total, $answered),
+            $this->buildMapPrompt(),
+            UI::column()
+                ->grow()
+                ->minHeight(Unit::em(0))
+                ->content(
+                    new WorldMap(
+                        // Nothing is highlighted when the map holds the answer;
+                        // the highlight would be the answer.
+                        $quiz->mapIsAnswer() ? '' : $this->current()->code,
+                        $greens,
+                        $reds,
+                        fn(string $iso) => $this->handlePick($iso),
+                        autoZoom: !$quiz->mapIsAnswer() && $this->autoZoom,
                     ),
-                UI::column()
-                    ->grow()
-                    ->minHeight(Unit::em(0))
-                    ->content(
-                        new WorldMap(
-                            $this->current()->code,
-                            $greens,
-                            $reds,
-                            fn(string $iso) => $this->handlePick($iso),
-                            autoZoom: $this->autoZoom,
-                        ),
-                    ),
+                ),
+            ...$this->buildAnswer(),
+            new BrandInfo(fn() => $this->phase = GamePhase::Start, fn() => $this->finish()),
+        ];
+
+        return $screen->content(...$children);
+    }
+
+    /**
+     * How the answer is given: typed into the field, picked out of a handful of
+     * flags, or clicked straight on the map — in which case the answer area is
+     * only the line telling you so.
+     *
+     * @return UIElement[]
+     */
+    private function buildAnswer(): array
+    {
+        $quiz = $this->quiz();
+
+        if ($quiz->isTyped()) {
+            return [
                 new GuessInput(
                     $this->current()->code,
+                    $this->destination->placeholder(),
                     $this->wrong,
                     fn(string $value) => $this->handleGuess($value),
                     fn() => $this->skip(),
                     fn() => $this->next(),
                 ),
-                new BrandInfo(fn() => $this->phase = GamePhase::Start, fn() => $this->finish()),
-            );
-    }
-
-    /**
-     * Pinpoint mode: the flag and its name above a blank world map, and the
-     * answer is where you click. Nothing on the map is highlighted and it never
-     * auto-zooms — either would give the question away — so the map holds still
-     * and only fills in behind you as countries are answered.
-     */
-    private function buildPlayPinpoint(int $total, int $answered): UIElement
-    {
-        $score = $answered > 0 ? (int)round($this->countStatus(Answer::Correct) / $answered * 100) : 0;
-        $time = Duration::since($this->startTime);
-        $right = $this->countHistory(Answer::Correct);
-        $wrong = $this->countHistory(Answer::Wrong);
-
-        $greens = $this->isosAnswered(Answer::Correct);
-        $reds = $this->isosAnswered(Answer::Wrong);
-        // A lenient miss leaves the country actually clicked showing red until
-        // the next try — where the guess went is the correction.
-        if ($this->wrong && $this->pickedIso !== '') {
-            $reds[] = $this->pickedIso;
+            ];
         }
 
-        // Fullscreen: the map fills the viewport edge-to-edge — no card chrome
-        // (margins / border / rounding / shadow) boxing it in.
-        return UI::column()
-            ->grow()
-            ->minHeight(Unit::em(0))
-            ->background(Palette::white())
-            ->clipContent()
-            // Escape passes on the flag, as it does in the typed modes. There
-            // it hangs off the answer field; here there is no field, so the
-            // screen itself carries the key.
-            ->onGlobalKeyDown(fn() => $this->next(), [Key::Escape], preventDefault: true)
-            ->content(
-                new ScoreBar($answered, $total, $score, $right, $wrong, $time, array_slice($this->history, -5)),
-                $this->buildPinpointPrompt(),
-                UI::column()
-                    ->grow()
-                    ->minHeight(Unit::em(0))
-                    ->content(
-                        new WorldMap(
-                            '',
-                            $greens,
-                            $reds,
-                            fn(string $iso) => $this->handlePick($iso),
-                            autoZoom: false,
-                        ),
-                    ),
-                $this->buildPinpointHint(),
-                new BrandInfo(fn() => $this->phase = GamePhase::Start, fn() => $this->finish()),
-            );
+        if ($quiz->picksFlag()) {
+            return [
+                new FlagChoices(
+                    $this->flagChoices(),
+                    $this->pickedIso,
+                    fn(string $iso) => $this->judgePick($iso),
+                ),
+                $this->buildHint('Pick the flag · Esc to pass'),
+            ];
+        }
+
+        return [$this->buildHint('Click the country · Esc to pass')];
     }
 
-    /**
-     * The Pinpoint question: the flag, its name, and how the answer is going —
-     * asking for the click, or naming the country the last one landed on.
-     */
-    private function buildPinpointPrompt(): UIElement
-    {
-        $country = $this->current();
-        $picked = $this->pickedIso !== '' ? Country::byCode($this->pickedIso) : null;
-
-        return UI::row()
-            ->noShrink()
-            ->wrap()
-            ->alignMiddle()
-            ->gap(Unit::px(14))
-            ->bordered(bottom: 1)
-            ->borderColor($this->wrong ? Palette::red() : Palette::border())
-            ->background($this->wrong ? Palette::redWash() : Palette::white())
-            ->padding(x: Unit::px(16), y: Unit::px(12))
-            ->padding(x: Unit::px(24), pseudo: Pseudo::lg())
-            ->content(
-                UI::image($country->thumbUrl(), $country->name)
-                    ->noShrink()
-                    ->width(Unit::px(60))
-                    ->height(Unit::px(40))
-                    ->objectContain()
-                    ->rounded(Unit::px(4))
-                    ->bordered()
-                    ->borderColor(Palette::border())
-                    ->shadow(Shadow::Small),
-                UI::column()
-                    ->gap(Unit::px(2))
-                    ->content(
-                        UI::text($country->name)
-                            ->weight(FontWeight::SemiBold)
-                            ->fontSize(FontSize::Large)
-                            ->fontSize(FontSize::TwoXL, Pseudo::sm()),
-                        $picked !== null
-                            ? UI::text('That is ' . $picked->name . ' — try again')
-                                ->fontSize(FontSize::Small)->weight(FontWeight::Medium)->color(Palette::red())
-                            : UI::text('Click this country on the map')
-                                ->fontSize(FontSize::Small)->color(Palette::subtle()),
-                    ),
-            );
-    }
-
-    /** The Pinpoint footer: how to answer, and the way out of a flag. */
-    private function buildPinpointHint(): UIElement
+    /** The footer under a pointed answer: how to give one, and the way past it. */
+    private function buildHint(string $text): UIElement
     {
         return UI::row()
             ->noShrink()
@@ -786,7 +844,7 @@ class FlagQuiz extends Component
             ->fontSize(FontSize::Small)
             ->color(Palette::subtle())
             ->content(
-                UI::text('Click the country · Esc to pass'),
+                UI::text($text),
                 UI::text('·')->color(Palette::dot()),
                 UI::button('Skip')
                     ->borderNone()
@@ -797,6 +855,125 @@ class FlagQuiz extends Component
                     ->clickable()
                     ->onClick(fn() => $this->skip()),
             );
+    }
+
+    /**
+     * The question on the card: whatever is being shown, given room — the flag
+     * big enough to study, the words under it — and then the ask itself.
+     */
+    private function buildCardPrompt(): UIElement
+    {
+        $quiz = $this->quiz();
+        $country = $this->current();
+
+        $shown = [];
+        if ($quiz->shows(Attribute::Flag)) {
+            $shown[] = UI::image($country->bigUrl(), '')
+                ->maxWidth(Unit::full())
+                ->maxHeight(Unit::em(11))
+                ->objectContain()
+                ->rounded(Unit::px(6))
+                ->shadow(Shadow::Small);
+        }
+        if ($quiz->shows(Attribute::Name)) {
+            $shown[] = UI::text($country->name)
+                ->center()
+                ->weight(FontWeight::SemiBold)
+                ->fontSize(FontSize::TwoXL)
+                ->fontSize(FontSize::ThreeXL, Pseudo::sm());
+        }
+        if ($quiz->shows(Attribute::Capital)) {
+            $shown[] = UI::text($country->capitalLabel())
+                ->center()
+                ->weight(FontWeight::SemiBold)
+                ->fontSize(FontSize::TwoXL)
+                ->fontSize(FontSize::ThreeXL, Pseudo::sm());
+        }
+
+        return UI::column()
+            ->grow()
+            ->minHeight(Unit::em(0))
+            ->alignMiddle()
+            ->alignCenter()
+            ->gap(Unit::px(14))
+            ->padding(Unit::px(24))
+            ->padding(Unit::px(36), Pseudo::sm())
+            ->content(...$shown, ...[$this->buildAsk()]);
+    }
+
+    /** The question above the map: the same things, in a line, over the answer. */
+    private function buildMapPrompt(): UIElement
+    {
+        $quiz = $this->quiz();
+        $country = $this->current();
+
+        $shown = [];
+        if ($quiz->shows(Attribute::Flag)) {
+            $shown[] = UI::image($country->thumbUrl(), '')
+                ->noShrink()
+                ->width(Unit::px(60))
+                ->height(Unit::px(40))
+                ->objectContain()
+                ->rounded(Unit::px(4))
+                ->bordered()
+                ->borderColor(Palette::border())
+                ->shadow(Shadow::Small);
+        }
+        $words = [];
+        if ($quiz->shows(Attribute::Name)) {
+            $words[] = $country->name;
+        }
+        if ($quiz->shows(Attribute::Capital)) {
+            $words[] = $country->capitalLabel();
+        }
+        if ($words !== []) {
+            $shown[] = UI::text(implode(' · ', $words))
+                ->weight(FontWeight::SemiBold)
+                ->fontSize(FontSize::Large);
+        }
+
+        return UI::row()
+            ->noShrink()
+            ->wrap()
+            ->alignMiddle()
+            ->alignBetween()
+            ->gap(Unit::px(12))
+            ->bordered(bottom: 1)
+            ->borderColor(Palette::border())
+            ->padding(x: Unit::px(16), y: Unit::px(12))
+            ->padding(x: Unit::px(24), pseudo: Pseudo::lg())
+            ->content(
+                UI::row()->wrap()->alignMiddle()->gap(Unit::px(12))->content(
+                    ...$shown,
+                    ...[$this->buildAsk()],
+                ),
+                // Auto-zoom only means something while the map is the question:
+                // where it holds the answer there is no target to zoom to, and
+                // zooming to one would be the answer.
+                ...($quiz->mapIsAnswer()
+                    ? []
+                    : [new ChipToggle('Auto-zoom', $this->autoZoom, fn() => $this->toggleAutoZoom())]),
+            );
+    }
+
+    /**
+     * The ask, or the correction standing in for it — after a wrong answer that
+     * can still be retried, what to say is what went wrong.
+     */
+    private function buildAsk(): UIElement
+    {
+        $picked = $this->pickedIso !== '' ? Country::byCode($this->pickedIso) : null;
+
+        if ($this->wrong && $picked !== null) {
+            return UI::text('That is ' . $picked->name . ' — try again')
+                ->fontSize(FontSize::Small)
+                ->weight(FontWeight::Medium)
+                ->color(Palette::red());
+        }
+
+        return UI::text($this->quiz()->question())
+            ->fontSize(FontSize::Small)
+            ->color(Palette::subtle());
     }
 
     /**
@@ -932,6 +1109,7 @@ class FlagQuiz extends Component
             $accuracy,
             $score,
             (new Duration($this->elapsed))->clock(),
+            $this->destination,
             $this->missedFlags(),
             fn() => $this->startGame(),
             fn() => $this->phase = GamePhase::Start,

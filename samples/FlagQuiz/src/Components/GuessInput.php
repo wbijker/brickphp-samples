@@ -31,6 +31,7 @@ class GuessInput extends Component
 
     public function __construct(
         private string $code,
+        private string $placeholder,
         private bool $wrong,
         private Closure $onGuess,
         private Closure $onSkip,
@@ -67,7 +68,7 @@ class GuessInput extends Component
     {
         return UI::input()
             ->text()
-            ->placeholder('Type the country…')
+            ->placeholder($this->placeholder)
             ->autocomplete('off')
             ->key('fq-input')
             ->attr('id', 'fq-input')

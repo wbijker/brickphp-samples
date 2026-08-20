@@ -8,7 +8,8 @@ namespace Samples\FlagQuiz;
  * it — '' when they gave none, which is the case for a straight skip.
  *
  * The guess carries how it was made as well as what it was: typed into the
- * field, or the name of a country picked off the map in Pinpoint. The two read
+ * field, or the name of a country picked off the map or out of the flags on
+ * offer. The two read
  * back differently (see {@see GuessKind}).
  *
  * A sibling of {@see RemainingFlag}: the review list needs country *and* guess

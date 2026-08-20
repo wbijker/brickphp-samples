@@ -58,6 +58,26 @@ final class Country
         return false;
     }
 
+    /**
+     * True when $guess names any of this country's capitals. Where the roles
+     * are split — Sucre and La Paz, Pretoria and Cape Town and Bloemfontein —
+     * each one on its own is a right answer; nobody should have to know which
+     * of the three the list leads with.
+     */
+    public function matchesCapital(string $guess): bool
+    {
+        $needle = self::normalize($guess);
+        if ($needle === '') {
+            return false;
+        }
+        foreach ($this->capitals as $capital) {
+            if ($needle === self::normalize($capital)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Lowercase, strip diacritics/punctuation and the filler words the/and/of. */
     public static function normalize(string $s): string
     {

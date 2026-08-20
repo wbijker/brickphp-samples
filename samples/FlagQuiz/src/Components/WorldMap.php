@@ -18,8 +18,9 @@ use Samples\News\Leaflet;
  * the ones already correct = green, wrong = red) as per-feature style overrides,
  * so the map recolours and zooms to the target. Clicking a country dispatches
  * its ISO-2 code, which the quiz reads as a move or an answer depending on the
- * mode. Pinpoint passes no target at all — there, where the country is *is* the
- * question, so nothing is highlighted and nothing is zoomed to.
+ * question being asked. A quiz that asks *for* the place passes no target at
+ * all — there, where the country is is the question, so nothing is highlighted
+ * and nothing is zoomed to.
  */
 class WorldMap extends Component
 {
@@ -102,8 +103,8 @@ class WorldMap extends Component
 
         // Push this render's colouring. Precedence green > red > target: apply
         // target first, then reds, then greens last so a correct/wrong answer
-        // keeps its colour. An empty target — Pinpoint, where highlighting the
-        // country would be the answer — highlights nothing.
+        // keeps its colour. An empty target — a quiz that asks for the place,
+        // where highlighting the country would be the answer — highlights nothing.
         $overrides = $this->targetIso === '' ? [] : [$this->targetIso => self::TARGET_STYLE];
         foreach ($this->reds as $iso) {
             $overrides[$iso] = self::RED_STYLE;

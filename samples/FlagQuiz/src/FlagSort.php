@@ -4,10 +4,10 @@ namespace Samples\FlagQuiz;
 
 /**
  * How the questions are ordered for a game, chosen from the start-screen
- * dropdown. The Flags-mode options group visually similar flags next to each
- * other so lookalikes (Chad/Romania, Indonesia/Monaco, …) can be compared;
- * Locations mode instead offers "By Continent" so the map walks region by
- * region. Which options apply to which mode is decided by {@see forMode()}.
+ * dropdown. The appearance groupings put visually similar flags next to each
+ * other so lookalikes (Chad/Romania, Indonesia/Monaco, …) can be compared, and
+ * "By Continent" walks the world region by region. Which of them a given
+ * pairing offers is decided by {@see forQuiz()}.
  *
  * String-backed so it round-trips through the session state and the <select>'s
  * change event. The flag groupings are driven by {@see FlagTraits}.
@@ -35,17 +35,19 @@ enum FlagSort: string
     }
 
     /**
-     * The order options offered for a game mode. The map modes ask about places,
-     * so the flag-appearance groupings make no sense there — only Random and the
-     * region grouping apply.
+     * The order options offered for a pairing. Grouping by how flags look only
+     * says something when the flags are on screen — as the question or as the
+     * answer to pick from; otherwise the deck is ordered by region or not at
+     * all.
      *
      * @return self[]
      */
-    public static function forMode(GameMode $mode): array
+    public static function forQuiz(Quiz $quiz): array
     {
-        return $mode->usesMap()
-            ? [self::Random, self::Continent]
-            : [self::Random, self::Color, self::Shape, self::ShapeColor, self::Similarity];
+        $showsFlags = $quiz->shows(Attribute::Flag) || $quiz->picksFlag();
+        return $showsFlags
+            ? [self::Random, self::Continent, self::Color, self::Shape, self::ShapeColor, self::Similarity]
+            : [self::Random, self::Continent];
     }
 
     /**

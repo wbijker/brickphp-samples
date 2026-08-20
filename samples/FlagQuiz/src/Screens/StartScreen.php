@@ -14,41 +14,45 @@ use BrickPHP\UI\UIElement;
 use BrickPHP\UI\Unit;
 use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
+use Samples\FlagQuiz\Attribute;
+use Samples\FlagQuiz\Components\AttributeList;
 use Samples\FlagQuiz\Components\Toggle;
 use Samples\FlagQuiz\Continent;
 use Samples\FlagQuiz\FlagSort;
-use Samples\FlagQuiz\GameMode;
 use Samples\FlagQuiz\Logo;
 use Samples\FlagQuiz\Palette;
+use Samples\FlagQuiz\Quiz;
 
 /**
- * The landing screen: logo, title, the game-mode chooser, the continent filter
- * and settings (in a scrolling middle), with the Start button pinned to the
- * bottom. The mode cards are driven straight off {@see GameMode} and the
- * continent chips off {@see Continent}, which carry their own copy.
+ * The landing screen: logo, title, the two lists that spell out the question,
+ * the continent filter and the settings, with Start at the bottom. The lists
+ * are driven straight off {@see Attribute} and the continent chips off
+ * {@see Continent}, which carry their own copy.
  */
 class StartScreen extends Component
 {
     /**
-     * @param GameMode    $quizMode        selected quiz mode (Flags or Location)
-     * @param Continent[] $continents      currently selected continents
-     * @param Closure $onStart            fn(): void
-     * @param Closure $onSelectMode       fn(GameMode $mode): void
-     * @param Closure $onToggleShowFlags  fn(): void
-     * @param Closure $onToggleStrict     fn(): void
-     * @param Closure $onSelectSort       fn(FlagSort $sort): void
-     * @param Closure $onToggleContinent  fn(Continent $continent): void
-     * @param Closure $onExplore          fn(): void — launch Explore directly
+     * @param Quiz        $quiz              the question being built: shown → asked for
+     * @param Continent[] $continents        currently selected continents
+     * @param Closure $onStart              fn(): void
+     * @param Closure $onToggleSource       fn(Attribute $attribute): void
+     * @param Closure $onSelectDestination  fn(Attribute $attribute): void
+     * @param Closure $onToggleShowFlags    fn(): void
+     * @param Closure $onToggleStrict       fn(): void
+     * @param Closure $onSelectSort         fn(FlagSort $sort): void
+     * @param Closure $onToggleContinent    fn(Continent $continent): void
+     * @param Closure $onExplore            fn(): void — launch Explore directly
      */
     public function __construct(
         private int $count,
-        private GameMode $quizMode,
+        private Quiz $quiz,
         private bool $showFlags,
         private bool $strict,
         private FlagSort $flagSort,
         private array $continents,
         private Closure $onStart,
-        private Closure $onSelectMode,
+        private Closure $onToggleSource,
+        private Closure $onSelectDestination,
         private Closure $onToggleShowFlags,
         private Closure $onToggleStrict,
         private Closure $onSelectSort,
@@ -131,7 +135,7 @@ class StartScreen extends Component
                                 UI::text('Learn the flags and countries of the world.')
                                     ->center()->fontSize(FontSize::Base)->color(Palette::subtle()),
                             ),
-                        $this->modeChooser(),
+                        $this->questionBuilder(),
                         // The two supporting choices — which countries, and
                         // how strictly — pair off into columns once there is
                         // width for them, and stack again when there isn't.
@@ -160,28 +164,32 @@ class StartScreen extends Component
             );
     }
 
-    private function modeChooser(): UIElement
+    /**
+     * The question, built as two lists: everything to show on the left, the one
+     * thing to ask for on the right. Between them they say the whole game —
+     * tick the flag and ask for the capital, or tick the capital and the map
+     * and ask for the name — so there is nothing else to choose a mode with.
+     */
+    private function questionBuilder(): UIElement
     {
-        $cards = [];
-        foreach (GameMode::quizModes() as $mode) {
-            $cards[] = $mode === $this->quizMode
-                ? $this->modeCardSelected($mode)
-                : $this->modeCard($mode);
-        }
-
         return UI::column()
             ->width(Unit::full())
             ->gap(Unit::px(10))
             ->content(
-                // Header: section label on the left, the Explore shortcut on
-                // the right (a single click jumps straight into Explore mode).
+                // Header: what the two lists currently spell out, and the
+                // Explore shortcut (a single click jumps straight into it).
                 UI::row()
                     ->alignMiddle()
                     ->alignBetween()
+                    ->wrap()
                     ->gap(Unit::px(8))
                     ->content(
-                        UI::text('Game mode')
-                            ->fontSize(FontSize::ExtraSmall)->uppercase()->color(Palette::labelMuted()),
+                        UI::row()->alignMiddle()->gap(Unit::px(8))->content(
+                            UI::text('The question')
+                                ->fontSize(FontSize::ExtraSmall)->uppercase()->color(Palette::labelMuted()),
+                            UI::text($this->quiz->summary())
+                                ->fontSize(FontSize::ExtraSmall)->weight(FontWeight::SemiBold)->color(Palette::blue()),
+                        ),
                         UI::button('Explore the map →')
                             ->noShrink()
                             ->borderNone()
@@ -193,51 +201,27 @@ class StartScreen extends Component
                             ->clickable()
                             ->onClick(fn() => ($this->onExplore)()),
                     ),
-                // A grid rather than a wrapping row: the cards carry a line of
-                // description each, so left to themselves they size to their
-                // text and a long one takes a row of its own. Equal tracks put
-                // them side by side as soon as the panel is wide enough, all
-                // the same height.
                 UI::grid(1)
-                    ->columns(3, Pseudo::sm())
-                    ->gap(Unit::px(10))
-                    ->content(...$cards),
-            );
-    }
-
-    private function modeCard(GameMode $mode): UIElement
-    {
-        return UI::column()
-            ->grow()
-            ->minWidth(Unit::px(180))
-            ->gap(Unit::px(3))
-            ->background(Palette::white())
-            ->bordered()
-            ->borderColor(Palette::border())
-            ->rounded(Unit::px(12))
-            ->padding(Unit::px(16))
-            ->clickable()
-            ->onClick(fn() => ($this->onSelectMode)($mode))
-            ->content(
-                UI::text($mode->title())->weight(FontWeight::SemiBold)->fontSize(FontSize::Base),
-                UI::text($mode->description())->fontSize(FontSize::ExtraSmall)->color(Palette::subtle()),
-            );
-    }
-
-    private function modeCardSelected(GameMode $mode): UIElement
-    {
-        return UI::column()
-            ->grow()
-            ->minWidth(Unit::px(180))
-            ->gap(Unit::px(3))
-            ->background(Palette::blueWash())
-            ->bordered(2)
-            ->borderColor(Palette::blue())
-            ->rounded(Unit::px(12))
-            ->padding(Unit::px(16))
-            ->content(
-                UI::text($mode->title())->weight(FontWeight::SemiBold)->fontSize(FontSize::Base),
-                UI::text($mode->description())->fontSize(FontSize::ExtraSmall)->color(Palette::subtle()),
+                    ->columns(2, Pseudo::sm())
+                    ->gap(Unit::px(16))
+                    ->alignItems(GridAlign::Start)
+                    ->content(
+                        new AttributeList(
+                            'Show me',
+                            'one or more',
+                            $this->quiz->sources,
+                            [$this->quiz->destination],
+                            $this->onToggleSource,
+                        ),
+                        new AttributeList(
+                            'Ask me for',
+                            'one',
+                            [$this->quiz->destination],
+                            [],
+                            $this->onSelectDestination,
+                            single: true,
+                        ),
+                    ),
             );
     }
 
@@ -308,14 +292,16 @@ class StartScreen extends Component
 
     private function settings(): UIElement
     {
-        // The navigation toggle is per-mode and doesn't apply to all of them
-        // (see GameMode::hasNavToggle) — where it doesn't, it and its divider
-        // are left out rather than shown doing nothing.
+        // The navigation setting means different things for different
+        // questions and nothing at all for some of them (see
+        // Quiz::navSetting) — where it means nothing, it and its divider are
+        // left out rather than shown doing nothing.
         $rows = [];
-        if ($this->quizMode->hasNavToggle()) {
+        $navigation = $this->quiz->navSetting();
+        if ($navigation !== null) {
             $rows[] = new Toggle(
-                $this->quizMode->navToggleLabel(),
-                $this->quizMode->navToggleDescription(),
+                $navigation->label,
+                $navigation->description,
                 $this->showFlags,
                 $this->onToggleShowFlags,
             );
@@ -347,7 +333,7 @@ class StartScreen extends Component
     private function flagOrderSetting(): UIElement
     {
         $options = [];
-        foreach (FlagSort::forMode($this->quizMode) as $sort) {
+        foreach (FlagSort::forQuiz($this->quiz) as $sort) {
             $options[] = UI::option($sort->label(), $sort->value)->selected($sort === $this->flagSort);
         }
 
