@@ -4,6 +4,7 @@ namespace Samples\FlagQuiz\Screens;
 
 use Closure;
 use BrickPHP\Events\InputEvent;
+use BrickPHP\UI\Direction;
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
 use BrickPHP\UI\GridAlign;
@@ -16,18 +17,18 @@ use BrickPHP\VNode\Component;
 use BrickPHP\VNode\VNode;
 use Samples\FlagQuiz\Attribute;
 use Samples\FlagQuiz\Components\AttributeList;
+use Samples\FlagQuiz\Components\FlagGlobe;
 use Samples\FlagQuiz\Components\Toggle;
 use Samples\FlagQuiz\Continent;
 use Samples\FlagQuiz\FlagSort;
-use Samples\FlagQuiz\Logo;
 use Samples\FlagQuiz\Palette;
 use Samples\FlagQuiz\Quiz;
 
 /**
- * The landing screen: logo, title, the two lists that spell out the question,
- * the continent filter and the settings, with Start at the bottom. The lists
- * are driven straight off {@see Attribute} and the continent chips off
- * {@see Continent}, which carry their own copy.
+ * The landing screen: a header of title and flag globe, the two lists that
+ * spell out the question, the continent filter and the settings, with Start at
+ * the bottom. The lists are driven straight off {@see Attribute} and the
+ * continent chips off {@see Continent}, which carry their own copy.
  */
 class StartScreen extends Component
 {
@@ -62,21 +63,7 @@ class StartScreen extends Component
 
     protected function build(): VNode
     {
-        // Backdrop + content as two layers: the flag field is a real image
-        // element behind the stack (added before primary(), so it paints
-        // underneath), cropped to fill whatever shape the screen is. The
-        // scrolling column is the primary layer and sizes the stack.
-        return UI::layers()
-            ->grow()
-            ->minHeight(Unit::em(0))
-            ->layer(
-                UI::image('/assets/images/flags-background-soft.png')
-                    ->width(Unit::full())
-                    ->height(Unit::full())
-                    ->objectCover()
-                    ->objectCenter(),
-            )
-            ->primary($this->page());
+        return $this->page();
     }
 
     /**
@@ -92,17 +79,10 @@ class StartScreen extends Component
             ->height(Unit::full())
             ->scrollableY()
             ->alignCenter()
+            ->gap(Unit::px(30))
             ->padding(Unit::px(24))
             ->padding(Unit::px(40), Pseudo::sm())
-            // Positioned, so it stacks above the backdrop layer rather than
-            // under it — an absolute sibling paints over a static one.
-            ->relative()
             ->content(
-                // The choices sit on their own white panel: over a field of
-                // flags, headline and labels need a plain ground of their own
-                // to read against, and the panel edge is what separates the
-                // thing you interact with from the picture behind it.
-                //
                 // The panel takes the width it is given, in steps: a phone
                 // column, a wider card on a tablet, and a broad one on a
                 // desktop — where the sections below then sit side by side
@@ -115,52 +95,84 @@ class StartScreen extends Component
                     ->maxWidth(Unit::px(760), Pseudo::sm())
                     ->maxWidth(Unit::px(1080), Pseudo::lg())
                     ->alignCenter()
-                    ->gap(Unit::px(24))
+                    ->gap(Unit::px(22))
                     ->background(Palette::white())
                     ->bordered()
                     ->borderColor(Palette::border())
                     ->rounded(Unit::px(20))
                     ->padding(Unit::px(24))
-                    ->padding(Unit::px(32), Pseudo::sm())
+                    ->padding(Unit::px(28), Pseudo::sm())
                     ->shadow(Shadow::Large)
                     ->content(
-                        UI::column()
-                            ->alignCenter()
-                            ->gap(Unit::px(12))
-                            ->content(
-                                new Logo(true),
-                                UI::text('Vexi')
-                                    ->fontSize(FontSize::FourXL)->fontSize(FontSize::FiveXL, Pseudo::sm())
-                                    ->weight(FontWeight::SemiBold)->center(),
-                                UI::text('Learn the flags and countries of the world.')
-                                    ->center()->fontSize(FontSize::Base)->color(Palette::subtle()),
-                            ),
-                        $this->questionBuilder(),
-                        // The two supporting choices — which countries, and
-                        // how strictly — pair off into columns once there is
-                        // width for them, and stack again when there isn't.
-                        UI::grid(1)
-                            ->columns(2, Pseudo::lg())
-                            ->width(Unit::full())
-                            ->gap(Unit::px(24))
-                            ->alignItems(GridAlign::Start)
-                            ->content(
-                                $this->continentPicker(),
-                                $this->settings(),
-                            ),
-                        UI::button('Start Quiz')
-                            ->width(Unit::full())
-                            ->background(Palette::ink())
-                            ->color(Palette::white())
-                            ->borderNone()
-                            ->rounded(Unit::px(14))
-                            ->padding(Unit::px(17))
-                            ->weight(FontWeight::SemiBold)
-                            ->fontSize(FontSize::Large)
-                            ->shadow(Shadow::Large)
-                            ->clickable()
-                            ->onClick(fn() => ($this->onStart)()),
-                    )
+                        $this->heading(),
+                        $this->body(),
+                    ),
+            );
+    }
+
+    /**
+     * The header: the name of the game, and the game itself standing beside it
+     * — every flag on a globe, on the right from lg and above the words when
+     * there is no room for that. The globe is the mark now; a logo next to it
+     * would be a second one.
+     */
+    private function heading(): UIElement
+    {
+        return UI::column()
+            ->width(Unit::full())
+            ->direction(Direction::rowReverse(), Pseudo::lg())
+            ->alignCenter()
+            ->alignMiddle()
+            ->gap(Unit::px(16))
+            ->gap(Unit::px(40), Pseudo::lg())
+            ->content(
+                new FlagGlobe(),
+                UI::column()
+                    ->alignCenter()
+                    ->gap(Unit::px(6))
+                    ->content(
+                        UI::text('Vexi')
+                            ->fontSize(FontSize::FourXL)->fontSize(FontSize::FiveXL, Pseudo::sm())
+                            ->weight(FontWeight::SemiBold)->center(),
+                        UI::text('Learn the flags and countries of the world.')
+                            ->center()->fontSize(FontSize::Base)->color(Palette::subtle()),
+                    ),
+            );
+    }
+
+    /** Everything you actually choose. */
+    private function body(): UIElement
+    {
+        return UI::column()
+            ->width(Unit::full())
+            ->alignCenter()
+            ->gap(Unit::px(22))
+            ->content(
+                $this->questionBuilder(),
+                // The two supporting choices — which countries, and how
+                // strictly — pair off into columns once there is width for
+                // them, and stack again when there isn't.
+                UI::grid(1)
+                    ->columns(2, Pseudo::lg())
+                    ->width(Unit::full())
+                    ->gap(Unit::px(24))
+                    ->alignItems(GridAlign::Start)
+                    ->content(
+                        $this->continentPicker(),
+                        $this->settings(),
+                    ),
+                UI::button('Start Quiz')
+                    ->width(Unit::full())
+                    ->background(Palette::ink())
+                    ->color(Palette::white())
+                    ->borderNone()
+                    ->rounded(Unit::px(14))
+                    ->padding(Unit::px(17))
+                    ->weight(FontWeight::SemiBold)
+                    ->fontSize(FontSize::Large)
+                    ->shadow(Shadow::Large)
+                    ->clickable()
+                    ->onClick(fn() => ($this->onStart)()),
             );
     }
 

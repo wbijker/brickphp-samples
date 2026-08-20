@@ -40,6 +40,15 @@ final class Country
         return 'https://flagcdn.com/w160/' . $this->code . '.png';
     }
 
+    /**
+     * The smallest of the three, for flags drawn at postage-stamp size and in
+     * quantity — a screen showing all 197 at once pays for every one of them.
+     */
+    public function tinyUrl(): string
+    {
+        return 'https://flagcdn.com/w80/' . $this->code . '.png';
+    }
+
     /** True when $guess matches this country's name or any accepted alias. */
     public function matches(string $guess): bool
     {
