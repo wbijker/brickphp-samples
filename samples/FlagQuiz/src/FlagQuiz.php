@@ -247,25 +247,22 @@ class FlagQuiz extends Component
     }
 
     /**
-     * A clicked country in Locations mode. When "free navigation" is on you
-     * can move between countries — clicking an unanswered one selects it as the
-     * target. When off, you can't move, so a click is a guess of the current
-     * target instead.
+     * A clicked country in Locations mode — navigation only, never an answer.
+     * The map is something you drag, zoom and poke at, and the browser calls
+     * the end of any of that a click; nothing that casual should be able to
+     * spend an answer. Guesses arrive one way, through the input: Enter
+     * submits, the buttons pass or skip.
      *
-     * In strict mode a wrong answer is final, so an errant map click would
-     * permanently mark the country wrong and advance. To avoid that, map clicks
-     * are discarded entirely in strict mode and do nothing.
+     * So a click only moves the question: with "free navigation" on, clicking
+     * an unanswered country makes it the target. With it off, the target is
+     * fixed and a click does nothing at all.
      */
     private function handlePick(string $iso): void
     {
-        if ($this->strict) {
+        if (!$this->showFlags) {
             return;
         }
         $iso = strtolower($iso);
-        if (!$this->showFlags) {
-            $this->judge($iso === $this->current()->code);
-            return;
-        }
         $pos = $this->posForIso($iso);
         if ($pos !== null && ($this->status[$pos] ?? Answer::Pending) === Answer::Pending) {
             $this->index = $pos;
@@ -612,7 +609,7 @@ class FlagQuiz extends Component
                                 ->fontSize(FontSize::Small)->weight(FontWeight::SemiBold),
                             UI::text($this->showFlags
                                 ? '· type its name · tap any country to jump there'
-                                : '· tap it on the map or type its name')
+                                : '· type its name')
                                 ->fontSize(FontSize::Small)->color(Palette::subtle()),
                         ),
                         new ChipToggle('Auto-zoom', $this->autoZoom, fn() => $this->toggleAutoZoom()),

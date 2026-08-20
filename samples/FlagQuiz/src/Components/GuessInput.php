@@ -4,6 +4,7 @@ namespace Samples\FlagQuiz\Components;
 
 use Closure;
 use BrickPHP\Events\Key;
+use BrickPHP\Events\KeyboardEvent;
 use BrickPHP\UI\FontSize;
 use BrickPHP\UI\FontWeight;
 use BrickPHP\UI\Pseudo;
@@ -79,10 +80,27 @@ class GuessInput extends Component
             // Starting a round is exactly that later case, so FlagQuiz issues
             // Dom::focus('fq-input') by hand (as it does after a jump).
             ->autofocus()
-            // Tab passes too, but only while typing — so it binds to the field
-            // itself rather than the document, and preventDefault keeps focus
-            // here instead of moving it to the next control.
-            ->onKeyDown(fn() => ($this->onNext)(), [Key::Tab], preventDefault: true)
+            // Enter submits and Tab passes — both from one handler, since a
+            // node holds a single listener per event. Deliberately keydown and
+            // not `change`: `change` also fires when a half-typed field loses
+            // focus, so clicking away — onto the map, say — would spend the
+            // answer on whatever was typed so far. An answer leaves here only
+            // when the player presses Enter.
+            //
+            // Both keys are the field's own, not the document's: they mean
+            // this only while typing. preventDefault keeps Tab's focus here
+            // instead of moving it to the next control.
+            ->onKeyDown(
+                function (KeyboardEvent $event) {
+                    if ($event->key === Key::Enter->value) {
+                        ($this->onGuess)($this->input);
+                        return;
+                    }
+                    ($this->onNext)();
+                },
+                [Key::Enter, Key::Tab],
+                preventDefault: true,
+            )
             ->bind($this->input)
             ->width(Unit::full())
             ->padding(x: Unit::px(20), y: Unit::px(18))
@@ -92,8 +110,7 @@ class GuessInput extends Component
             ->background($this->wrong ? Palette::redWash() : Palette::white())
             ->bordered(top: 1)
             ->borderColor($this->wrong ? Palette::red() : Palette::border())
-            ->outlineNone()
-            ->onChange(fn() => ($this->onGuess)($this->input));
+            ->outlineNone();
     }
 
     private function buildHint(): UIElement
