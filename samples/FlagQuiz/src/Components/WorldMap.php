@@ -17,7 +17,9 @@ use Samples\News\Leaflet;
  * map JS. Each render pushes the current quiz state (the country to name = blue,
  * the ones already correct = green, wrong = red) as per-feature style overrides,
  * so the map recolours and zooms to the target. Clicking a country dispatches
- * its ISO-2 code as a guess.
+ * its ISO-2 code, which the quiz reads as a move or an answer depending on the
+ * mode. Pinpoint passes no target at all — there, where the country is *is* the
+ * question, so nothing is highlighted and nothing is zoomed to.
  */
 class WorldMap extends Component
 {
@@ -66,7 +68,12 @@ class WorldMap extends Component
     protected function build(): VNode
     {
         $map = (new Leaflet(self::MAP_ID, [25, 0], 2))
-            ->mapOptions(['minZoom' => 1, 'worldCopyJump' => true, 'attributionControl' => false])
+            // One world only. The countries are a GeoJSON overlay, so they
+            // exist once however far out the basemap tiles repeat — zoomed
+            // out, that showed the single set of them broken across the left
+            // and right edges with nothing in the middle.
+            ->singleWorld()
+            ->mapOptions(['attributionControl' => false])
             ->tile('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', ['maxZoom' => 8])
             ->container(fn($div) => $div->extend()->minHeight(Unit::em(17.5))->background(Color::stone(200)))
             ->onFeatureClick($this->onPick)
@@ -95,8 +102,9 @@ class WorldMap extends Component
 
         // Push this render's colouring. Precedence green > red > target: apply
         // target first, then reds, then greens last so a correct/wrong answer
-        // keeps its colour.
-        $overrides = [$this->targetIso => self::TARGET_STYLE];
+        // keeps its colour. An empty target — Pinpoint, where highlighting the
+        // country would be the answer — highlights nothing.
+        $overrides = $this->targetIso === '' ? [] : [$this->targetIso => self::TARGET_STYLE];
         foreach ($this->reds as $iso) {
             $overrides[$iso] = self::RED_STYLE;
         }

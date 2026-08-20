@@ -71,6 +71,9 @@ class Leaflet extends StatelessComponent
     /** @var (callable(mixed): mixed)|null Customises the container div (size, colours…). */
     private $containerStyler = null;
 
+    /** Fence the view to one copy of the world — see {@see singleWorld()}. */
+    private bool $singleWorld = false;
+
     /** @var array{url:string,opts:array<string,mixed>}|null GeoJSON overlay, built once in created(). */
     private ?array $geoJson = null;
 
@@ -154,6 +157,28 @@ class Leaflet extends StatelessComponent
     public function mapOptions(array $options): self
     {
         $this->mapOptions = $options;
+        return $this;
+    }
+
+    /**
+     * Hold the map to a single copy of the world.
+     *
+     * Left alone, a world map zoomed out far enough shows the world more than
+     * once: tiles repeat sideways forever, while an overlay drawn from GeoJSON
+     * exists exactly once, at its real longitudes. Together those give the view
+     * this fixes — the one set of countries split across the two far edges of a
+     * repeating basemap, open water in between.
+     *
+     * Enabled, the tiles stop repeating and the view is fenced to that one
+     * world, so it can be neither doubled nor left behind. The zoom floor
+     * follows the container: out as far as the whole world, and no further,
+     * since past that point zooming only shrinks it into the middle. A map
+     * wider than the world at that zoom simply centres it — Leaflet's own
+     * behaviour once the bounds are smaller than the view.
+     */
+    public function singleWorld(bool $on = true): self
+    {
+        $this->singleWorld = $on;
         return $this;
     }
 
@@ -357,6 +382,17 @@ class Leaflet extends StatelessComponent
     {
         $ref = $this->mapRef();
 
+        if ($this->singleWorld) {
+            // Three things make the world singular: tiles that don't repeat,
+            // a view fenced to the world's own bounds, and — dropped rather
+            // than set — worldCopyJump, whose whole job is to carry the view
+            // over into the next copy. There isn't one to carry it to.
+            $this->tileOptions['noWrap'] = true;
+            $this->mapOptions['maxBounds'] = [[-90, -180], [90, 180]];
+            $this->mapOptions['maxBoundsViscosity'] = 1;
+            unset($this->mapOptions['worldCopyJump']);
+        }
+
         $lines = [
             // var map = L.map("key", {options});
             Js::assign("var map ", Js::invoke(Js::obj('L', 'map'), Js::str($this->key), $this->mapOptions)),
@@ -371,6 +407,12 @@ class Leaflet extends StatelessComponent
             ),
             Js::invoke(Js::obj("map", 'setView'), $this->initialCoords ?? [0, 0], $this->initialZoom),
         ];
+
+        // The zoom floor depends on how wide the map ends up on screen, which
+        // only the client knows — and which changes when the window does.
+        if ($this->singleWorld) {
+            $lines[] = Js::invoke(Js::obj('BrickLeaflet', 'singleWorld'), Js::str($this->key));
+        }
 
         // GeoJSON overlay (built once): hand the config to the runtime, which
         // fetches, draws the features and wires their clicks.
@@ -526,14 +568,87 @@ class Leaflet extends StatelessComponent
             var state = {};   // mapKey -> feature state
             var cache = {};   // url    -> parsed GeoJSON (shared across rebuilds)
 
+            // How far the pointer may travel between press and release and
+            // still count as a tap rather than a pan, and how long a tap waits
+            // to see whether a second one turns it into a double-click.
+            var DRAG_SLOP_PX = 6;
+            var DOUBLE_TAP_MS = 250;
+
+            // A lookup table keyed by feature id. Bare — no prototype — because
+            // the ids are arbitrary strings and some collide with what every
+            // object inherits: Austria is 'at', and a plain {} (or the []
+            // an empty map arrives as) answers ['at'] with Array.prototype.at,
+            // a function that then reads as that country's style. Leaflet can
+            // make nothing of it and paints its own blue over the country.
+            function table(source) {
+                var out = Object.create(null);
+                Object.keys(source || {}).forEach(function (k) { out[k] = source[k]; });
+                return out;
+            }
+
             function ensure(key) {
                 return state[key] || (state[key] = {
                     idProps: [], nameProps: [], defaultStyle: {}, ids: null, split: false,
-                    styles: {}, byId: {}, names: {},
+                    styles: table(), byId: table(), names: table(),
                     event: '', dispatchId: key,
                     template: '', tooltipOpts: { permanent: true, direction: 'center' },
-                    tooltips: false, fit: null, fittedId: null, loaded: false
+                    tooltips: false, fit: null, fittedId: null, loaded: false,
+                    watching: false, dragged: false, pending: null, pendingId: ''
                 });
+            }
+
+            // Pointer position of a mouse, touch or pen event.
+            function pointOf(e) {
+                var t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+                return [t.clientX || 0, t.clientY || 0];
+            }
+
+            // Watch how the map is being pressed, so a click can be told apart
+            // from the end of a gesture. Dragging the world is a press, a move
+            // and a release, and the browser still reports that as a click on
+            // whatever shape stayed under the pointer throughout. Where a
+            // feature click is an answer rather than a nudge of the view, that
+            // misread costs the player the question. Listeners go on the
+            // container in the capture phase, ahead of Leaflet's own handling.
+            function watchGestures(key, map) {
+                var st = ensure(key);
+                if (st.watching) return;
+                st.watching = true;
+
+                var el = map.getContainer(), x = 0, y = 0;
+                el.addEventListener('pointerdown', function (e) {
+                    var p = pointOf(e);
+                    x = p[0];
+                    y = p[1];
+                    st.dragged = false;
+                }, true);
+                el.addEventListener('pointerup', function (e) {
+                    var p = pointOf(e);
+                    st.dragged = Math.abs(p[0] - x) > DRAG_SLOP_PX
+                        || Math.abs(p[1] - y) > DRAG_SLOP_PX;
+                }, true);
+            }
+
+            // A feature was clicked. Report it only if the click was meant:
+            // not the tail of a pan, and not the opening half of a double-click
+            // (which zooms). Holding the first tap for the length of a
+            // double-click is what makes the second one able to cancel it.
+            function featureTap(key, id) {
+                var st = state[key];
+                if (!st || !st.event || st.dragged) return;
+                if (st.pending) {
+                    clearTimeout(st.pending);
+                    st.pending = null;
+                    // Twice on the same country is a zoom, and reports nothing.
+                    // On a different one the player simply moved on, so the new
+                    // tap takes the old one's place below.
+                    if (id === st.pendingId) return;
+                }
+                st.pendingId = id;
+                st.pending = setTimeout(function () {
+                    st.pending = null;
+                    Brick.dispatch(st.event, document.getElementById(st.dispatchId), id);
+                }, DOUBLE_TAP_MS);
             }
 
             function idOf(feature, props) {
@@ -606,6 +721,20 @@ class Leaflet extends StatelessComponent
                 });
             }
 
+            // The last zoom at which the whole world still fits the map —
+            // past it, zooming out only shrinks the world into the middle of
+            // the container, which is worth stopping at. Measured rather than
+            // asked of map.getBoundsZoom, which clamps its answer to the
+            // minimum zoom currently set and so could never lower one. The
+            // CRS's scale() is the world's size in pixels at a zoom, square
+            // in Mercator, so the shorter side of the map decides.
+            function worldFloor(map) {
+                var size = map.getSize(), fits = Math.min(size.x, size.y),
+                    crs = map.options.crs, z = 0;
+                while (z < 18 && crs.scale(z + 1) <= fits) z++;
+                return z;
+            }
+
             // Bounds covering every feature that shares an id.
             function boundsOf(layers) {
                 var b = layers[0].getBounds();
@@ -632,6 +761,7 @@ class Leaflet extends StatelessComponent
             function buildLayer(key, geo) {
                 var st = ensure(key), map = window.leafLet[key];
                 if (!map) return;
+                if (st.event) watchGestures(key, map);
                 if (st.split) geo = explode(geo);
                 L.geoJSON(geo, {
                     // Unidentifiable features, and (when an allow-list is set)
@@ -648,9 +778,7 @@ class Leaflet extends StatelessComponent
                         if (st.byId[id]) st.byId[id].push(layer);
                         else { st.byId[id] = [layer]; st.names[id] = nameOf(f, st.nameProps); }
                         if (st.event) {
-                            layer.on('click', function () {
-                                Brick.dispatch(st.event, document.getElementById(st.dispatchId), id);
-                            });
+                            layer.on('click', function () { featureTap(key, id); });
                         }
                     }
                 }).addTo(map);
@@ -668,7 +796,7 @@ class Leaflet extends StatelessComponent
                     st.defaultStyle = opts.defaultStyle || {};
                     st.split = !!opts.split;
                     if (opts.ids && opts.ids.length) {
-                        st.ids = {};
+                        st.ids = table();
                         opts.ids.forEach(function (id) { st.ids[String(id).toLowerCase()] = true; });
                     }
                     st.event = opts.event || '';
@@ -680,8 +808,23 @@ class Leaflet extends StatelessComponent
                         cache[url] = geo; buildLayer(key, geo);
                     });
                 },
+                // Set the zoom floor to the level that shows the whole world,
+                // and keep it in step as the map is resized. The bounds fence
+                // and the non-repeating tiles come from the map options; this
+                // is the part that has to measure the container first.
+                singleWorld: function (key) {
+                    var map = window.leafLet[key];
+                    if (!map) return;
+                    var hold = function () {
+                        var z = worldFloor(map);
+                        map.setMinZoom(z);
+                        if (map.getZoom() < z) map.setZoom(z);
+                    };
+                    hold();
+                    map.on('resize', hold);
+                },
                 styleFeatures: function (key, overrides) {
-                    ensure(key).styles = overrides || {};
+                    ensure(key).styles = table(overrides);
                     apply(key);
                 },
                 fitToFeature: function (key, id, opts) {
@@ -696,7 +839,10 @@ class Leaflet extends StatelessComponent
                     apply(key);
                 },
                 destroy: function (key) {
-                    var map = window.leafLet[key];
+                    var map = window.leafLet[key], st = state[key];
+                    // A tap still waiting out its double-click window would
+                    // otherwise land on a map that no longer exists.
+                    if (st && st.pending) clearTimeout(st.pending);
                     if (map) { try { map.remove(); } catch (e) {} }
                     delete window.leafLet[key];
                     delete state[key];
