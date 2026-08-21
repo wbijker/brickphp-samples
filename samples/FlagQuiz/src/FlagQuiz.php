@@ -17,6 +17,7 @@ use BrickPHP\VNode\VNode;
 use Samples\FlagQuiz\Components\BrandInfo;
 use Samples\FlagQuiz\Components\ChipToggle;
 use Samples\FlagQuiz\Components\CountryList;
+use Samples\FlagQuiz\Components\FactStrip;
 use Samples\FlagQuiz\Components\FlagChoices;
 use Samples\FlagQuiz\Components\FlagGrid;
 use Samples\FlagQuiz\Components\GuessInput;
@@ -33,11 +34,13 @@ use Samples\FlagQuiz\Screens\StartScreen;
  * mode and per-question outcomes are typed enums ({@see GamePhase},
  * {@see GameMode}, {@see Answer}) rather than magic strings.
  *
- * A game is a {@see Quiz}: some of a country's four {@see Attribute}s shown,
- * and one of them asked for. That pairing decides everything downstream — how
- * the question is drawn, whether the map is the question or the answer, what
- * an answer even is — so the screens below ask it rather than testing for
- * named modes.
+ * A game is a {@see Quiz}: some of a country's {@see Attribute}s shown — its
+ * flag, its name, its capital, its place on the map, its landmarks, rivers,
+ * mountains, big waters or its population — and one of them asked for. That
+ * pairing decides everything downstream: how the question is drawn, whether
+ * the map is the question or the answer, what an answer even is, and which
+ * countries can be asked at all. So the screens below ask it rather than
+ * testing for named modes.
  *
  * Layout is responsive: one block that stacks vertically on narrow screens and
  * splits left/right from the `lg` breakpoint up. The page scrolls on small
@@ -73,8 +76,35 @@ class FlagQuiz extends Component
     private array $sources = [Attribute::Flag];
     private Attribute $destination = Attribute::Name;
 
+    /**
+     * The flags tab's question, kept while a place tab is open.
+     *
+     * There is only ever one question, so opening the Rivers tab has to
+     * replace whatever the flags tab was spelling out. Without this, coming
+     * back would land on the default and quietly undo a question that took
+     * four clicks to build.
+     *
+     * @var Attribute[]
+     */
+    private array $flagSources = [Attribute::Flag];
+    private Attribute $flagDestination = Attribute::Name;
+
     /** Explore mode: ISO-2 of the country currently focused on the map. */
     private string $exploreIso = '';
+
+    /**
+     * Explore mode: which of the facts the map draws — the landmarks pinned,
+     * the rivers traced, the ranges and lakes shaded. Not what the strip says
+     * about the country, which is always all of it; this is the map underneath.
+     *
+     * A standing preference, not anything about the country focused, so it
+     * holds while you walk down the list — the whole use of it being to look
+     * at one thing across many countries. May be emptied: a plain map with
+     * nothing drawn on it is a fair way to want it.
+     *
+     * @var Attribute[]
+     */
+    private array $exploreLayers = [];
 
     /**
      * The country wrongly pointed at for the question still on screen, so the
@@ -131,12 +161,22 @@ class FlagQuiz extends Component
         if ($this->continents === []) {
             $this->continents = Continent::cases();
         }
+        // Same again for Explore's map layers — everything drawn to begin
+        // with. A session that turned them all off still restores empty: the
+        // saved state is one array for the whole component, so an empty entry
+        // in it is a stored choice and not a missing one.
+        if ($this->exploreLayers === []) {
+            $this->exploreLayers = Attribute::layers();
+        }
 
         $this->useState($this->phase);
         $this->useState($this->mode);
         $this->useState($this->sources);
         $this->useState($this->destination);
+        $this->useState($this->flagSources);
+        $this->useState($this->flagDestination);
         $this->useState($this->exploreIso);
+        $this->useState($this->exploreLayers);
         $this->useState($this->pickedIso);
         $this->useState($this->autoZoom);
         $this->useState($this->showFlags);
@@ -214,6 +254,14 @@ class FlagQuiz extends Component
      */
     private function beginRound(array $indexes): void
     {
+        // Nothing to ask: the continents chosen hold no country carrying every
+        // fact the question names. Stay where we are rather than start a game
+        // with no questions in it — the start screen says as much, and the
+        // player fixes it by widening the selection or asking something else.
+        if ($indexes === []) {
+            return;
+        }
+
         // Always shuffle first; for the grouped orderings a stable sort by the
         // similarity key (stable since PHP 8.0) then clusters lookalikes while
         // keeping their within-group order random.
@@ -301,6 +349,25 @@ class FlagQuiz extends Component
      * navigation" on, clicking an unanswered country makes it the target; with
      * it off the target is fixed and a click does nothing at all.
      */
+    /**
+     * A click on the open map, when what is being asked for is a place rather
+     * than a country. Judged against where the place actually is — near the
+     * Zambezi is right whether the click fell in Zambia, Zimbabwe or the water
+     * between them, which is the point of asking about the river instead of
+     * about its countries.
+     *
+     * A miss records nothing to read back: there is no name for "somewhere in
+     * the Atlantic", and the results screen already says what the answer was.
+     */
+    private function handleLocate(float $lat, float $lon): void
+    {
+        $place = $this->quiz()->place();
+        if ($place === null) {
+            return;
+        }
+        $this->judge(PlaceLocator::hits($place, $this->current(), $lat, $lon));
+    }
+
     private function handlePick(string $iso): void
     {
         $iso = strtolower($iso);
@@ -381,6 +448,46 @@ class FlagQuiz extends Component
     private function exploreSelect(string $iso): void
     {
         $this->exploreIso = strtolower($iso);
+    }
+
+    /**
+     * Where Explore's map opens: on the first continent chosen. The world at
+     * zoom 2 is too far out for anything drawn on it to be read — a river is a
+     * hair and a landmark pin covers three countries — and the continents
+     * picked are the best statement of where you meant to be looking.
+     *
+     * The first rather than all of them, because "all of them" is the world
+     * again. It is only the opening view; the map is yours to move afterwards.
+     */
+    private function exploreOpensAt(): MapView
+    {
+        foreach (Continent::cases() as $continent) {
+            if (in_array($continent, $this->continents, true)) {
+                return $continent->view();
+            }
+        }
+        return MapView::world();
+    }
+
+    /**
+     * Draw this fact on Explore's map, or stop drawing it. Unlike the
+     * continents, the last one may be turned off: nothing drawn leaves a plain
+     * map, which is what Explore had before any of this and a fair way to want
+     * it. What the strip *says* about the country is untouched either way.
+     */
+    private function toggleExploreLayer(Attribute $fact): void
+    {
+        if (in_array($fact, $this->exploreLayers, true)) {
+            $this->exploreLayers = array_values(
+                array_filter($this->exploreLayers, fn(Attribute $a) => $a !== $fact),
+            );
+            return;
+        }
+        $this->exploreLayers[] = $fact;
+        // Kept in the lists' own order, however they were ticked, so the map
+        // stacks its layers the same way round every time.
+        $order = array_flip(array_map(fn(Attribute $a) => $a->value, Attribute::cases()));
+        usort($this->exploreLayers, fn(Attribute $a, Attribute $b) => $order[$a->value] <=> $order[$b->value]);
     }
 
     /** Order position of the country with this ISO-2 code, or null. */
@@ -472,6 +579,13 @@ class FlagQuiz extends Component
                 array_filter($this->sources, fn(Attribute $a) => $a !== $attribute),
             );
         } else {
+            // A river shown beside a flag would be a question claiming the one
+            // belongs to the other, which is the pairing that isn't offered
+            // ({@see Attribute::compatible()}). The row is greyed, so this is
+            // the belt to that braces.
+            if (!$this->quiz()->accepts($attribute)) {
+                return;
+            }
             $this->sources[] = $attribute;
             $this->sortSources();
         }
@@ -492,10 +606,94 @@ class FlagQuiz extends Component
         $replaced = $this->destination;
         $this->destination = $attribute;
 
-        $sources = array_values(array_filter($this->sources, fn(Attribute $a) => $a !== $attribute));
-        $this->sources = $sources === [] ? [$replaced] : $sources;
+        // Whatever was shown stays shown, less the attribute now being asked
+        // for — and less anything the new question rules out: ask for a river
+        // and the flag on the left has to go, since a river is not the flag's
+        // to have.
+        $sources = array_values(array_filter(
+            $this->sources,
+            fn(Attribute $a) => $a !== $attribute && Attribute::compatible($a, $attribute),
+        ));
+        // Nothing survived. The attribute just replaced takes its place where
+        // it can — asking for what you were shown simply turns the question
+        // around — and otherwise the first thing that pairs with it does.
+        if ($sources === []) {
+            $sources = [Attribute::compatible($replaced, $attribute)
+                ? $replaced
+                : self::firstCompatible($attribute)];
+        }
+        $this->sources = $sources;
         $this->sortSources();
         $this->settleFlagSort();
+    }
+
+    /**
+     * Something that can be shown when this is what's asked for. There is
+     * always one: the facts pair with each other, and the four a country is
+     * known by pair among themselves.
+     */
+    private static function firstCompatible(Attribute $destination): Attribute
+    {
+        foreach (Attribute::quizzable() as $attribute) {
+            if ($attribute !== $destination && Attribute::compatible($attribute, $destination)) {
+                return $attribute;
+            }
+        }
+        return Attribute::Flag;
+    }
+
+    /**
+     * Open a tab — the flags builder, or one of the places.
+     *
+     * A tab is not a thing the game remembers; it is read back off the
+     * question ({@see Quiz::place()}). So opening one means setting the
+     * question to that tab's, and the flags tab's is put aside first so that
+     * coming back to it finds what was left there.
+     */
+    private function selectTab(string $key): void
+    {
+        $place = Attribute::tryFrom($key);
+        if ($place === null || !$place->isPlace()) {
+            $this->sources = $this->flagSources;
+            $this->destination = $this->flagDestination;
+            $this->settleFlagSort();
+            return;
+        }
+
+        $this->rememberFlagsQuestion();
+        // Which way round the last place question ran carries over: someone
+        // finding rivers on the map is likely to want to find mountains the
+        // same way, and being put back to naming every time would be a click
+        // to undo on every tab.
+        $this->setPlaceQuestion($place, PlaceQuestion::of($this->quiz()) ?? PlaceQuestion::Name);
+    }
+
+    /** Ask this place's question the other way round. */
+    private function selectPlaceQuestion(Attribute $place, PlaceQuestion $question): void
+    {
+        $this->rememberFlagsQuestion();
+        $this->setPlaceQuestion($place, $question);
+    }
+
+    private function setPlaceQuestion(Attribute $place, PlaceQuestion $question): void
+    {
+        $quiz = $question->quizFor($place);
+        $this->sources = $quiz->sources;
+        $this->destination = $quiz->destination;
+        $this->settleFlagSort();
+    }
+
+    /**
+     * Put the flags tab's question aside, if that is what is on screen. Only
+     * then — moving from one place tab to another must not overwrite it with a
+     * question about rivers.
+     */
+    private function rememberFlagsQuestion(): void
+    {
+        if ($this->quiz()->place() === null) {
+            $this->flagSources = $this->sources;
+            $this->flagDestination = $this->destination;
+        }
     }
 
     /** Keep the shown attributes in the lists' own order, however they were ticked. */
@@ -533,12 +731,21 @@ class FlagQuiz extends Component
         }
     }
 
-    /** @return int[] indices into Country::all() within the selected continents */
+    /**
+     * The countries a game would actually be played over: those on a chosen
+     * continent that can answer the question being asked. The second half of
+     * that matters now that a question can be about a river or a mountain
+     * range — Malta has neither, and a round including it would be a round
+     * with an unanswerable question in it.
+     *
+     * @return int[] indices into Country::all()
+     */
     private function selectedCountryIndexes(): array
     {
+        $quiz = $this->quiz();
         $out = [];
         foreach (Country::all() as $i => $country) {
-            if (in_array($country->continent, $this->continents, true)) {
+            if (in_array($country->continent, $this->continents, true) && $quiz->covers($country)) {
                 $out[] = $i;
             }
         }
@@ -623,8 +830,8 @@ class FlagQuiz extends Component
                 match (true) {
                     $this->phase === GamePhase::Finished => $this->buildFinished($total),
                     $isExplore => $this->buildExplore(),
-                    // One playing screen for all twelve pairings: the map ones
-                    // fill the viewport, the rest sit on a card.
+                    // One playing screen for every pairing there is: the map
+                    // ones fill the viewport, the rest sit on a card.
                     $this->phase === GamePhase::Playing && $this->quiz()->usesMap()
                         => $this->buildPlayOnMap($total, $answered),
                     $this->phase === GamePhase::Playing => $this->buildPlayOnCard($total, $answered),
@@ -643,6 +850,9 @@ class FlagQuiz extends Component
                         fn(FlagSort $s) => $this->setFlagSort($s),
                         fn(Continent $c) => $this->toggleContinent($c),
                         fn() => $this->startExplore(),
+                        fn(string $key) => $this->selectTab($key),
+                        fn(Attribute $place, PlaceQuestion $question)
+                            => $this->selectPlaceQuestion($place, $question),
                     ),
                 }
             );
@@ -777,12 +987,34 @@ class FlagQuiz extends Component
                 ->content(
                     new WorldMap(
                         // Nothing is highlighted when the map holds the answer;
-                        // the highlight would be the answer.
-                        $quiz->mapIsAnswer() ? '' : $this->current()->code,
+                        // the highlight would be the answer. Nor when the
+                        // question is about a place: the country it falls in is
+                        // beside the point, and shading it in would answer a
+                        // question nobody asked.
+                        $quiz->mapIsAnswer() || $quiz->place() !== null ? '' : $this->current()->code,
                         $greens,
                         $reds,
                         fn(string $iso) => $this->handlePick($iso),
                         autoZoom: !$quiz->mapIsAnswer() && $this->autoZoom,
+                        // A question about a river shows the river, not the
+                        // country it runs through — unless the river is what is
+                        // being looked for, in which case drawing it would be
+                        // drawing the answer (see Quiz::mappableFacts()).
+                        factsOf: [$this->current()],
+                        factLayers: $quiz->mappableFacts(),
+                        // Shown to be named, a place is drawn with nothing
+                        // naming it. The picture of a landmark is the question.
+                        namePlaces: !$quiz->namesPlace(),
+                        // Shown to be named, the place has to be visible:
+                        // at world zoom a landmark photo is four pixels
+                        // across. Zoomed to once per question.
+                        fitToPlaces: $quiz->namesPlace(),
+                        // Finding a place is answered by pointing at the place,
+                        // so the answer is where the click landed rather than
+                        // which country it landed on.
+                        onLocate: $quiz->locatesPlace()
+                            ? fn(float $lat, float $lon) => $this->handleLocate($lat, $lon)
+                            : null,
                     ),
                 ),
             ...$this->buildAnswer(),
@@ -874,19 +1106,10 @@ class FlagQuiz extends Component
                 ->rounded(Unit::px(6))
                 ->shadow(Shadow::Small);
         }
-        if ($quiz->shows(Attribute::Name)) {
-            $shown[] = UI::text($country->name)
-                ->center()
-                ->weight(FontWeight::SemiBold)
-                ->fontSize(FontSize::TwoXL)
-                ->fontSize(FontSize::ThreeXL, Pseudo::sm());
-        }
-        if ($quiz->shows(Attribute::Capital)) {
-            $shown[] = UI::text($country->capitalLabel())
-                ->center()
-                ->weight(FontWeight::SemiBold)
-                ->fontSize(FontSize::TwoXL)
-                ->fontSize(FontSize::ThreeXL, Pseudo::sm());
+        foreach ($quiz->contentSources() as $source) {
+            if ($source !== Attribute::Flag) {
+                $shown[] = $this->buildFact($source, $country);
+            }
         }
 
         return UI::column()
@@ -898,6 +1121,44 @@ class FlagQuiz extends Component
             ->padding(Unit::px(24))
             ->padding(Unit::px(36), Pseudo::sm())
             ->content(...$shown, ...[$this->buildAsk()]);
+    }
+
+    /**
+     * One shown fact on the card: the value, with the name of the attribute
+     * over it where the value doesn't say what it is. "Cairo" is plainly a
+     * capital; "Nile" could be a river, a landmark or a dam, and three facts
+     * stacked namelessly would be a puzzle about the question rather than the
+     * question.
+     *
+     * The list-valued facts name several things at once and are set smaller
+     * for it — four landmarks at heading size are a paragraph, not a prompt.
+     */
+    private function buildFact(Attribute $attribute, Country $country): UIElement
+    {
+        $value = UI::text($attribute->textOf($country))
+            ->center()
+            ->weight(FontWeight::SemiBold);
+        if ($attribute->isList()) {
+            $value->fontSize(FontSize::Large)->fontSize(FontSize::TwoXL, Pseudo::sm());
+        } else {
+            $value->fontSize(FontSize::TwoXL)->fontSize(FontSize::ThreeXL, Pseudo::sm());
+        }
+
+        if (!$attribute->needsLabel()) {
+            return $value;
+        }
+
+        return UI::column()
+            ->alignCenter()
+            ->gap(Unit::px(4))
+            ->content(
+                UI::text($attribute->label())
+                    ->center()
+                    ->fontSize(FontSize::ExtraSmall)
+                    ->uppercase()
+                    ->color(Palette::labelMuted()),
+                $value,
+            );
     }
 
     /** The question above the map: the same things, in a line, over the answer. */
@@ -918,17 +1179,26 @@ class FlagQuiz extends Component
                 ->borderColor(Palette::border())
                 ->shadow(Shadow::Small);
         }
-        $words = [];
-        if ($quiz->shows(Attribute::Name)) {
-            $words[] = $country->name;
-        }
-        if ($quiz->shows(Attribute::Capital)) {
-            $words[] = $country->capitalLabel();
-        }
-        if ($words !== []) {
-            $shown[] = UI::text(implode(' · ', $words))
+        // In a line there is no room to stack a caption over a value, so the
+        // caption goes in front of it — small, grey and set in capitals, so it
+        // reads as the name of the thing rather than as part of it. Written
+        // that way and not as "Lake: Lake Toba", which says lake twice and
+        // still leaves the two words looking like one phrase.
+        foreach ($quiz->contentSources() as $source) {
+            if ($source === Attribute::Flag) {
+                continue;
+            }
+            $value = UI::text($source->textOf($country))
                 ->weight(FontWeight::SemiBold)
                 ->fontSize(FontSize::Large);
+            $shown[] = $source->needsLabel()
+                ? UI::row()->alignMiddle()->gap(Unit::px(7))->content(
+                    UI::text($source->label())
+                        ->noShrink()
+                        ->fontSize(FontSize::ExtraSmall)->uppercase()->color(Palette::labelMuted()),
+                    $value,
+                )
+                : $value;
         }
 
         return UI::row()
@@ -1001,15 +1271,33 @@ class FlagQuiz extends Component
     private function buildExplore(): UIElement
     {
         $selected = $this->exploreIso !== '' ? Country::byCode($this->exploreIso) : null;
+        // The countries Explore is about: the chosen continents. The list on
+        // the left and the facts drawn on the map are the same set, so turning
+        // a continent off takes it out of both.
+        $exploring = array_values(array_filter(
+            Country::all(),
+            fn(Country $c) => in_array($c->continent, $this->continents, true),
+        ));
 
         // Fullscreen: the map fills the viewport edge-to-edge — no card chrome
         // (margins / border / rounding / shadow) boxing it in.
-        return UI::column()
+        $screen = UI::column()
             ->grow()
             ->minHeight(Unit::em(0))
             ->background(Palette::white())
-            ->clipContent()
-            ->content(
+            ->clipContent();
+
+        // The head of the screen: the title row, and under it the focused
+        // country's facts. Both live inside one element rather than sitting as
+        // two children of the screen, and deliberately: the map below is a
+        // Leaflet instance built once and kept, and appearing or vanishing
+        // between it and the top of the screen moves it a place along and has
+        // it rebuilt from scratch — the map blanks the moment you pick a
+        // country. Nested here, the screen always has exactly two children and
+        // the map keeps its place whatever the header does.
+        $head = UI::column()->noShrink();
+
+        $children = [
                 // Header: title + the focused country's flag & name + Back.
                 // Wraps so the controls fall below the title on small screens.
                 UI::row()
@@ -1054,6 +1342,22 @@ class FlagQuiz extends Component
                                 ->onClick(fn() => $this->phase = GamePhase::Start),
                         ),
                     ),
+        ];
+
+        // What the quiz can ask about this country, laid out for reading, over
+        // the chips saying which of it the map should draw. Explore is where
+        // the flags and the places are learned; the facts have to be somewhere
+        // too, or a landmarks round is a test with no book to study from.
+        // Always on screen, with or without a country focused — the chips are
+        // how you find out Explore has any of this.
+        $children[] = new FactStrip(
+            $selected,
+            $this->exploreLayers,
+            fn(Attribute $fact) => $this->toggleExploreLayer($fact),
+        );
+
+        return $screen->content(
+            $head->content(...$children),
                 // Body: list (left) + map (right); stacks on small screens.
                 UI::column()
                     ->grow()
@@ -1061,10 +1365,7 @@ class FlagQuiz extends Component
                     ->direction(Direction::row(), Pseudo::lg())
                     ->content(
                         new CountryList(
-                            array_values(array_filter(
-                                Country::all(),
-                                fn(Country $c) => in_array($c->continent, $this->continents, true),
-                            )),
+                            $exploring,
                             $this->exploreIso,
                             fn(string $iso) => $this->exploreSelect($iso),
                         ),
@@ -1079,10 +1380,23 @@ class FlagQuiz extends Component
                                     fn(string $iso) => $this->exploreSelect($iso),
                                     labels: true,
                                     autoZoom: $this->autoZoom,
+                                    // Facts drawn where they actually are — the
+                                    // landmarks pinned, the rivers traced — as
+                                    // the chips ask for. One country's while one
+                                    // is focused; everything in play when none
+                                    // is, so the chips mean something before
+                                    // anything has been clicked.
+                                    factsOf: $selected !== null ? [$selected] : $exploring,
+                                    factLayers: $this->exploreLayers,
+                                    // Opens on the first continent chosen
+                                    // rather than on the whole world, which is
+                                    // too far out to read anything drawn on it.
+                                    opensAt: $this->exploreOpensAt(),
+                                    showCountries: in_array(Attribute::Location, $this->exploreLayers, true),
                                 ),
                             ),
                     ),
-            );
+        );
     }
 
     /** @return RemainingFlag[] all unanswered questions (incl. the current one) */

@@ -27,6 +27,7 @@ use Samples\FlagQuiz\Palette;
 class AttributeList extends Component
 {
     /**
+     * @param Attribute[] $options  the rows this list offers, in order
      * @param Attribute[] $checked
      * @param Attribute[] $disabled rows shown but not selectable
      * @param Closure     $onToggle fn(Attribute $attribute): void
@@ -35,6 +36,7 @@ class AttributeList extends Component
     public function __construct(
         private string $title,
         private string $caption,
+        private array $options,
         private array $checked,
         private array $disabled,
         private Closure $onToggle,
@@ -44,7 +46,7 @@ class AttributeList extends Component
     protected function build(): VNode
     {
         $rows = [];
-        foreach (Attribute::cases() as $attribute) {
+        foreach ($this->options as $attribute) {
             $rows[] = match (true) {
                 in_array($attribute, $this->disabled, true) => $this->disabledRow($attribute),
                 in_array($attribute, $this->checked, true) => $this->checkedRow($attribute),

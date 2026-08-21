@@ -139,6 +139,48 @@ class FlagQuizApp extends App
                 font-weight: 500; font-size: 11px; color: #78716c;
             }
             CSS);
+
+        // The landmark pins, for the same reason and by the same route: the
+        // markup goes to Leaflet as a divIcon and is parsed into the map's
+        // marker pane, so again there is no UIElement to style.
+        //
+        // Anchored bottom-centre by a translate rather than by Leaflet's
+        // iconAnchor: the pin is as tall as whatever picture it holds, and an
+        // anchor has to be given in pixels up front. Letting the pin size
+        // itself and then shifting it by its own height puts its point on the
+        // landmark whatever shape the picture turns out to be.
+        $app->addStyleInline(<<<'CSS'
+            .fq-pin {
+                width: max-content; transform: translate(-50%, -100%);
+                display: flex; flex-direction: column; align-items: center; gap: 2px;
+                font: 600 12px/1.2 'Hanken Grotesk', system-ui, sans-serif; color: #1c1917;
+            }
+            .fq-pin img {
+                width: 54px; height: 40px; object-fit: cover;
+                border-radius: 5px; border: 2px solid #fff;
+                box-shadow: 0 1px 4px rgba(0,0,0,.3);
+            }
+            /* Shown to be named, a pin has no name — and a landmark with no
+               picture then has nothing at all, so it gets a dot to mark the
+               spot rather than an empty stalk floating over the map. */
+            .fq-pin .fq-pin-blank {
+                width: 12px; height: 12px; border-radius: 50%;
+                background: #1c1917; border: 2px solid #fff;
+                box-shadow: 0 1px 3px rgba(0,0,0,.3);
+            }
+            .fq-pin .fq-pin-name {
+                background: #fff; border: 1px solid #e2e8f0; border-radius: 5px;
+                padding: 1px 6px; white-space: nowrap;
+                box-shadow: 0 1px 3px rgba(0,0,0,.18);
+            }
+            /* The point of the pin: a small stalk down to the spot itself, so
+               the picture reads as hanging above the place rather than
+               covering it. */
+            .fq-pin::after {
+                content: ''; width: 2px; height: 7px; background: #1c1917;
+                border-radius: 1px;
+            }
+            CSS);
     }
 
     protected function view(): VNode

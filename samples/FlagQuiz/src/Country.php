@@ -4,8 +4,9 @@ namespace Samples\FlagQuiz;
 
 /**
  * A single country: its ISO-2 code, canonical name, capital(s) and accepted
- * aliases. Owns the flag-image URLs and the guess-matching logic. The full
- * catalogue lives in {@see Country::all()}; the game stores only indices into it.
+ * aliases. Owns the flag-image URLs and the guess-matching logic, and reaches
+ * everything else it is known for through {@see facts()}. The full catalogue
+ * lives in {@see Country::all()}; the game stores only indices into it.
  */
 final class Country
 {
@@ -28,6 +29,18 @@ final class Country
     public function capitalLabel(): string
     {
         return implode(' / ', $this->capitals);
+    }
+
+    /**
+     * What else this country is known for — its landmarks, rivers, mountains,
+     * big waters and population. Kept in {@see CountryFacts} rather than in the
+     * catalogue below, which is already the length it should be, and looked up
+     * by code so a country without an entry answers with an empty set rather
+     * than a missing one.
+     */
+    public function facts(): CountryFacts
+    {
+        return CountryFacts::for($this->code);
     }
 
     public function bigUrl(): string

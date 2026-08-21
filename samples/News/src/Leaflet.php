@@ -2,6 +2,7 @@
 
 namespace Samples\News;
 
+use BrickPHP\Events\EventData;
 use BrickPHP\Js\Js;
 use BrickPHP\UI\Color;
 use BrickPHP\UI\UI;
@@ -115,6 +116,20 @@ class Leaflet extends StatelessComponent
      */
     public function onClick(callable $callback): self
     {
+        // Teach the server how to read what the client sends for this event.
+        // Without it `leaflet:click` falls through to the default hydrator and
+        // the handler is called with the raw `{lat, lng}` array instead of the
+        // event object its signature asks for — a TypeError, which the
+        // framework answers by dropping the session and re-rendering from
+        // defaults. From the outside that looks like clicking the map throws
+        // you back to the start screen.
+        //
+        // Registered here rather than in registerAssets() because of when it
+        // is needed: hydration happens on the request that carries the click,
+        // and this runs while that request re-renders the old tree, which is
+        // before the payload is hydrated.
+        EventData::register(self::EVENT_CLICK, fn(mixed $raw) => LeafletMouseEvent::from($raw));
+
         $this->onClick = $callback;
         return $this;
     }
@@ -261,12 +276,47 @@ class Leaflet extends StatelessComponent
     }
 
     /** Forget the last fitted feature, so the next {@see fitToFeature()} re-zooms. */
+    /**
+     * Zoom to a rectangle — but only once per `$id`, the same guard
+     * {@see fitToFeature()} uses, so a re-render never yanks the view back
+     * from wherever the user has moved it.
+     *
+     * For things the GeoJSON layer knows nothing about: the overlays of
+     * {@see setOverlays()} are drawn from coordinates rather than from named
+     * features, so there is no feature id to fit to and the bounds have to be
+     * given outright.
+     *
+     * @param array{0: array{0: float, 1: float}, 1: array{0: float, 1: float}} $bounds
+     *   south-west and north-east corners, each [latitude, longitude]
+     * @param array<string,mixed> $options fitBounds options (padding, maxZoom…)
+     */
+    public function fitToBounds(string $id, array $bounds, array $options = []): void
+    {
+        $this->geoOp('fitToBounds', Js::str($id), $bounds, $options);
+    }
+
     public function clearFit(): void
     {
         $this->geoOp('clearFit');
     }
 
     /** Show or hide the per-feature tooltips (labels). */
+    /**
+     * Draw this render's overlays — lines, areas and pins — replacing whatever
+     * the last render drew. Passing none clears them.
+     *
+     * The other ways of putting things on this map cannot follow state that
+     * moves: the GeoJSON layer is built once from a URL, and the
+     * `addMarker` / `addPolygon` family is staged into the map's first render
+     * and never runs again. Overlays are the per-render kind, for what belongs
+     * to the country or the question currently on screen — see
+     * {@see LeafletOverlay}.
+     */
+    public function setOverlays(LeafletOverlay ...$overlays): void
+    {
+        $this->geoOp('setOverlays', array_map(fn(LeafletOverlay $o) => $o->toArray(), $overlays));
+    }
+
     public function showTooltips(bool $on): void
     {
         $this->geoOp('showTooltips', $on);
@@ -428,6 +478,12 @@ class Leaflet extends StatelessComponent
                 $this->geoJson['opts'],
             );
         }
+
+        // Anything setOverlays was handed before this point — the parent
+        // component's build() runs before this created() does, so a map's
+        // first set of overlays is always waiting by the time it exists.
+        $lines[] = Js::invoke(Js::obj('BrickLeaflet', 'drawOverlays'), Js::str($this->key));
+        $lines[] = Js::invoke(Js::obj('BrickLeaflet', 'applyBounds'), Js::str($this->key));
 
         // Drain staged additions (markers, circles, polygons, popups)
         // into the same Brick.ready block, after map setup.
@@ -598,7 +654,10 @@ class Leaflet extends StatelessComponent
                     event: '', dispatchId: key,
                     template: '', tooltipOpts: { permanent: true, direction: 'center' },
                     tooltips: false, fit: null, fittedId: null, loaded: false,
-                    watching: false, dragged: false, pending: null, pendingId: ''
+                    watching: false, dragged: false, pending: null, pendingId: '',
+                    // The layer group holding this render's overlays, so the
+                    // next render has one thing to take off the map.
+                    overlays: null, overlayItems: null, bounds: null, boundsId: null
                 });
             }
 
@@ -902,12 +961,76 @@ class Leaflet extends StatelessComponent
                     ensure(key).fit = { id: id, opts: opts || {} };
                     apply(key);
                 },
+                // Remembered before applying, for the same reason setOverlays
+                // remembers: on a map's first render this arrives before the
+                // map exists, and applyBounds is called again once it does.
+                fitToBounds: function (key, id, bounds, opts) {
+                    ensure(key).bounds = { id: id, bounds: bounds, opts: opts || {} };
+                    BrickLeaflet.applyBounds(key);
+                },
+                applyBounds: function (key) {
+                    var map = window.leafLet[key], st = ensure(key);
+                    if (!map || !st.bounds || st.boundsId === st.bounds.id) return;
+                    st.boundsId = st.bounds.id;
+                    map.fitBounds(st.bounds.bounds, st.bounds.opts);
+                },
                 clearFit: function (key) {
-                    var st = ensure(key); st.fit = null; st.fittedId = null;
+                    var st = ensure(key);
+                    st.fit = null; st.fittedId = null; st.bounds = null; st.boundsId = null;
                 },
                 showTooltips: function (key, on) {
                     ensure(key).tooltips = !!on;
                     apply(key);
+                },
+                // This render's lines, areas and pins, replacing the last
+                // render's. One layer group holds the lot, so swapping them is
+                // removing one thing and adding another — rather than hunting
+                // the map for whatever was added before, which is how these
+                // end up accumulating.
+                setOverlays: function (key, items) {
+                    // Remembered before drawing, because on a map's first
+                    // render this arrives before the map exists: the component
+                    // holding the map builds its children — and emits their
+                    // calls — before the map's own created() runs. Held here,
+                    // the first draw happens when that created() finishes and
+                    // calls drawOverlays.
+                    ensure(key).overlayItems = items || [];
+                    BrickLeaflet.drawOverlays(key);
+                },
+                drawOverlays: function (key) {
+                    var map = window.leafLet[key];
+                    if (!map) return;
+                    var st = ensure(key);
+                    var items = st.overlayItems || [];
+                    if (st.overlays) {
+                        map.removeLayer(st.overlays);
+                        st.overlays = null;
+                    }
+                    if (!items.length) return;
+
+                    var layers = [];
+                    items.forEach(function (it) {
+                        if (it.kind === 'line') {
+                            layers.push(L.polyline(it.paths, it.style || {}));
+                        } else if (it.kind === 'area') {
+                            layers.push(L.polygon(it.rings, it.style || {}));
+                        } else if (it.kind === 'pin') {
+                            layers.push(L.marker(it.at, {
+                                // iconSize null lets the markup size itself,
+                                // so a pin is as big as what it holds.
+                                icon: L.divIcon({
+                                    html: it.html,
+                                    className: it.className || '',
+                                    iconSize: null,
+                                }),
+                                // Pins are labels, not targets: clicks belong
+                                // to the country underneath.
+                                interactive: false,
+                                keyboard: false,
+                            }));
+                        }
+                    });
+                    st.overlays = L.layerGroup(layers).addTo(map);
                 },
                 destroy: function (key) {
                     var map = window.leafLet[key], st = state[key];
